@@ -1077,8 +1077,8 @@ test('dash: the lunge is what carries the run attack onto its target', () => {
 
 /* Each roster recovery must be reachable through the actual input path, not
    just by calling startSpecial directly. */
-test('up special: all five fighters rise from jump + special and up + special', () => {
-  const keys = ['valor', 'grim', 'astra', 'vesper', 'rook'];
+test('up special: all six fighters rise from jump + special and up + special', () => {
+  const keys = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow'];
   for (const key of keys) for (const input of [{ jump: true, special: true, right: true }, { up: true, special: true }]) {
     const { ctx } = run();
     const m = newMatch(ctx, cast(1, [key]), 'terminal');
@@ -1844,6 +1844,160 @@ test('physics: underside blocks an upward launch without pulling offstage fighte
   assert(a.y >= gd.y+gd.h+14 && a.vy === 0, 'fighter passed through the underside');
   a.x = gd.x-120; a.y = gd.y+gd.h+16; a.vy=-15; a.vx=0; a.applyPhysics(m);
   assert(a.x === gd.x-120 && a.y < gd.y+gd.h+14, 'underside collision affected an offstage recovery');
+});
+
+
+/* Marrow: real inputs, clean-hit healing, defenses, recovery and CPU safety. */
+test('marrow: existing saves migrate and classic opponents are valid', () => {
+  const vm = require('vm'); const {ctx,sandbox} = run();
+  sandbox.localStorage.setItem('rift-rumble-save-v1', JSON.stringify({unlocked:['valor','grim','astra','vesper','rook'],coins:123,settings:{music:false}}));
+  const migrated=vm.runInContext('SAVE.load()',ctx);
+  assert(migrated.unlocked.includes('marrow') && migrated.coins===123 && !migrated.settings.music, 'existing save did not migrate');
+  sandbox.Game={startMatch:opts=>{ sandbox.lastClassic=opts; }};sandbox.UI={toast:()=>{}};
+  require('./harness').load(ctx,['js/modes.js']);
+  for(const key of ['valor','grim','astra','vesper','rook','marrow']) {
+    vm.runInContext(`Modes.startClassic('${key}',0,5)`,ctx);
+    const stages=vm.runInContext('Modes.current.stages',ctx);
+    assert(stages.slice(0,4).every(s=>s.enemy!==key && !!sandbox.lastClassic),key+' invalid classic opponent');
+  }
+  vm.runInContext("Modes.startClassic('valor',0,5)",ctx);
+  assert(vm.runInContext('Modes.current.stages.some(s=>s.enemy==="marrow")',ctx),'Marrow cannot appear in classic');
+});
+
+test('marrow: soul reap hits once and heals only on clean enemy contact', () => {
+  for (const face of [-1,1]) for (const mode of ['hit','miss','shield','team','invincible','counter']) {
+    const {m,a,b,ctl,set}=itemFixture(['marrow','valor']); a.facing=face; a.damage=20;
+    b.x=face*(mode==='miss'?1200:75);
+    if(mode==='team') m.sameTeam=()=>true;
+    if(mode==='invincible') b.invincT=100;
+    if(mode==='counter') b.counterActive=true;
+    const read=m.readPlayerInput; if(mode==='shield') m.readPlayerInput=f=>f===b ? {shield:true} : read(f);
+    let hits=0; const hit=m.hitFighter.bind(m);
+    m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    set({special:true});ctl.tick(1);set({});
+    for(let i=0;i<45;i++) {
+      if(mode==='counter' && !b.counterHit) b.counterActive=true;
+      ctl.tick(1);
+    }
+    assert(mode==='hit' ? hits===1 && a.damage===18 && b.damage>0 : hits===0 && a.damage===20,
+      `${face} ${mode}: hits=${hits}, heal=${a.damage}, victim=${b.damage}`);
+  }
+});
+
+test('marrow: Soul Reap holds until release and scales damage up to 2x', () => {
+  function perform(hold) {
+    const {m,a,b,ctl,set}=itemFixture(['marrow','valor']);b.x=75;a.damage=20;
+    let hits=0;const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    set({special:true});ctl.tick(1);
+    if(hold) ctl.tick(hold);
+    assert(a.charging && a.actionT===0 && hits===0 && b.damage===0,'hit or advanced while holding G');
+    if(hold>60) assert(a.chargeT===60,'charge exceeded cap');
+    set({});ctl.tick(1);const mult=a.action.chargeMultiplier;ctl.tick(40);
+    assert(hits===1 && a.damage===18, 'release failed to hit once or heal');
+    return {d:b.damage,mult};
+  }
+  const tap=perform(0), half=perform(30), full=perform(60), over=perform(180);
+  assert(tap.d<half.d && half.d<full.d, `damage did not grow: ${tap.d}, ${half.d}, ${full.d}`);
+  assert(Math.abs(full.d/tap.d-2)<.001 && over.d===full.d && over.mult===2, 'maximum was not 2x');
+});
+
+test('marrow: Soul Reap is a traveling blast, not a melee hitbox', () => {
+  for (const face of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['marrow','valor']);a.facing=face;b.x=face*400;a.damage=20;
+    set({special:true});ctl.tick(61);
+    assert(m.projectiles.length===0 && b.damage===0,'blast fired while holding');
+    set({});ctl.tick(1);const startup=a.action.startup;ctl.tick(startup-1);
+    const p=m.projectiles.find(p=>p.kind==='soulblast');
+    assert(p && Math.sign(p.vx)===face && p.damage===22,'missing or incorrect charged projectile');
+    assert(b.damage===0 && a.damage===20,'remote opponent was hit instantly');
+    const before=p.x;ctl.tick(5);assert((p.x-before)*face>30,'blast did not travel forward');
+    ctl.tick(45);assert(b.damage===22 && a.damage===18,'ranged blast failed to connect and heal');
+  }
+});
+
+test('marrow: blast hits targets and vanishes on contact', () => {
+  const {m,a,b,ctl,set}=itemFixture(['marrow','valor']);b.x=800;
+  m.targets=[{x:220,y:a.y-62*a.scale,hp:3,dead:false}];
+  set({special:true});ctl.tick(61);set({});ctl.tick(40);
+  assert(m.targets[0].dead,'blast did not break target');
+  assert(!m.projectiles.some(p=>p.kind==='soulblast'),'blast passed through target');
+  assert(b.damage===0,'blast hit enemy after consuming target');
+});
+
+test('marrow: the projectile never heals a KOed or respawning owner', () => {
+  const {m,a,b,ctl,set}=itemFixture(['marrow','valor']);b.x=400;a.damage=20;
+  set({special:true});ctl.tick(1);set({});ctl.tick(12);
+  assert(m.projectiles.some(p=>p.kind==='soulblast'),'blast did not spawn');
+  a.state='respawn';a.respawnT=110;a.damage=20;ctl.tick(40);
+  assert(b.damage>0 && a.damage===20,'projectile healed respawning owner');
+});
+
+test('marrow: Grave Ascent gains 30 percent peak height over original', () => {
+  function height(rise,grounded) {
+    const {ctx}=run(), m=newMatch(ctx,cast(1,['marrow']),'skyshrine',{rules:{items:'none'}}), f=m.fighters[0];
+    if(rise!==null) f.def.specials.up.rise=rise;
+    f.x=0;f.y=grounded?m.stage.ground.y:-300;f.onGround=grounded;f.state=grounded?'idle':'fall';f.spawnProtect=f.invincT=f.respawnT=0;f.vx=f.vy=0;
+    const ctl=control(m);const y=f.y;let peak=y;f.__raw={up:true,special:true};ctl.tick(1);f.__raw={};
+    for(let i=0;i<80;i++){ctl.tick(1);peak=Math.min(peak,f.y);}
+    return y-peak;
+  }
+  for(const grounded of [false,true]) {
+    const before=height(9.4,grounded), after=height(null,grounded), ratio=after/before;
+    assert(Math.abs(ratio-1.3)<.01, `expected 30% more peak height, got ${(ratio*100-100).toFixed(1)}%`);
+  }
+});
+
+test('marrow: charge cancels when hit and never fires afterward', () => {
+  const {m,a,b,ctl,set}=itemFixture(['marrow','valor']);b.x=60;
+  set({special:true});ctl.tick(15);assert(a.charging,'did not start charge');
+  m.hitFighter(b,a,{damage:4,bkb:10,kbs:20,angle:60});
+  assert(!a.charging && !a.action,'hit failed to interrupt');
+  set({});ctl.tick(50);assert(b.damage===0,'interrupted charge fired on release');
+  const grab=itemFixture(['marrow','valor']);grab.set({special:true});grab.ctl.tick(15);
+  grab.m.beginGrab(grab.b,grab.a);
+  assert(!grab.a.charging && !grab.a.action, 'grab failed to cancel charging');
+});
+
+test('marrow: Grave Ascent rises and hits both sides once, with defenses respected', () => {
+  for(const side of [-1,1]) for(const mode of ['hit','shield','invincible','team','counter','late']) {
+    const {m,a,b,ctl,set}=itemFixture(['marrow','valor']);a.facing=1;b.x=side*(mode==='late'?400:65);
+    if(mode==='team') m.sameTeam=()=>true;
+    if(mode==='invincible')b.invincT=100;
+    let hits=0;const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    set({up:true,special:true});ctl.tick(1);set({});const start=a.y;
+    for(let t=0;t<36;t++) {
+      if(mode==='shield'){b.shieldHP=60;b.state='shield';}
+      if(mode==='counter' && !b.counterHit)b.counterActive=true;
+      if(mode==='late' && t===11){b.x=a.x+side*65;b.y=a.y;b.vx=b.vy=0;b.onGround=false;}
+      ctl.tick(1);
+    }
+    if(mode!=='counter') assert(a.y<start-40 || a.ledge, `recovery did not rise: ${side} ${mode} ${a.y} / ${start}`);
+    if(mode==='hit'||mode==='late') assert(hits===1 && b.damage>0,`${side} ${mode}: expected one hit, got ${hits}`);
+    else assert(hits===0, `${side} ${mode}: defense bypassed`);
+  }
+});
+
+test('marrow: Wraith Charge, Grave Ascent and Hollow Guard work through input', () => {
+  for(const dir of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['marrow','valor']);a.facing=dir;b.x=dir*100;
+    set({special:true,left:dir<0,right:dir>0});ctl.tick(1);set({});ctl.tick(50);
+    assert(b.damage>0, `side special missed facing ${dir}`);
+  }
+  const x=itemFixture(['marrow','valor']);x.b.x=400;x.a.x=0;x.a.y=-130;x.a.onGround=false;x.a.state='fall';const y=x.a.y;
+  x.set({up:true,special:true});x.ctl.tick(1);x.set({});x.ctl.tick(14);
+  assert(x.a.usedUpB && x.a.y<y-50, 'up special failed to recover');
+  const z=itemFixture(['marrow','valor']);z.b.x=55;
+  z.set({down:true,special:true});z.ctl.tick(1);z.set({});z.ctl.tick(4);
+  assert(z.a.counterActive, 'counter stance not active');
+  z.a.counterHit=z.b;z.ctl.tick(5);assert(z.b.damage>0, 'counter did not retaliate');
+});
+
+test('marrow: melee items preserve F attacks and CPU fights remain finite', () => {
+  const {m,a,ctl,set}=itemFixture(['marrow','valor']);const it=itemAt(m,a,'beamsword');ctl.tick(1);
+  assert(a.held===it,'Marrow did not pick up weapon');set({attack:true});ctl.tick(1);
+  assert(a.action && a.action.type==='move' && a.action.itemPerk==='reach','weapon did not modify his F attack');
+  const {ctx}=run();const match=newMatch(ctx,cast(4,['marrow','valor','grim','marrow'],{cpu:true}),'foundry',{rules:{items:'none'}});
+  for(let i=0;i<1200;i++) {match.update(); for(const f of match.fighters) assert(Number.isFinite(f.x)&&Number.isFinite(f.y), 'nonfinite CPU fighter');}
 });
 
 /* ---------------- entry ---------------- */

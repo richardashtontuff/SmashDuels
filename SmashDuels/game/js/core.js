@@ -12,7 +12,7 @@
    tools/atlascheck.js fails the build if index.html or the asset loader drifts from it,
    and the preview is served by tools/serve.py, which sends no-cache headers for the same reason,
    and `UI.diag().build` / the console banner say which build is actually running. */
-const BUILD = 'K28';
+const BUILD = 'K32';
 
 /* ---------- math / utils ---------- */
 const TAU = Math.PI * 2;
@@ -245,7 +245,8 @@ const SAVE = {
       };
     }
     SAVE.data.settings = Object.assign({ music: true, sfx: true }, SAVE.data.settings || {});
-    for (const k of ['valor', 'grim', 'astra', 'vesper', 'rook']) if (!SAVE.data.unlocked.includes(k)) SAVE.data.unlocked.push(k);
+    if (!Array.isArray(SAVE.data.unlocked)) SAVE.data.unlocked = [];
+    for (const k of FIGHTER_KEYS) if (!SAVE.data.unlocked.includes(k)) SAVE.data.unlocked.push(k);
     return SAVE.data;
   },
   save() {

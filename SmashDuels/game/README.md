@@ -15,7 +15,7 @@ python3 -m http.server 8080
 
 ## Fighter presentation
 
-The five supplied fighter sheets are in `../assets-src/characters/`. Their 290
+The original five supplied fighter sheets are in `../assets-src/characters/`. Their 290
 individually cut frames, including standalone effects, are packed into runtime atlases
 in `assets/atlas/` and used for movement, attacks and specials. Fighter select also
 shows portraits and appearance descriptions. Item artwork is unchanged.
@@ -24,6 +24,15 @@ The reviewed row and cell boundaries are maintained in `tools/build_character_sh
 Rebuild with Pillow and NumPy installed: `python tools/build_character_sheets.py`.
 Effect-only cells keep the previous fighter pose underneath them. Some source art has
 overlapping trails; these are separated as far as the supplied artwork permits.
+
+Marrow's supplied sheets are in `../assets-src/characters/marrow-sheets/`.
+`tools/build_marrow.py` keys and slices a curated set of 33 visually consistent
+poses into a runtime atlas; run it from the project root with Pillow and NumPy
+installed. His moves use fixed, hand-selected sequences and timed strike frames
+rather than rotating between unrelated drawings. Some actions reuse poses where
+the source sheets do not provide matching sequences. His separately generated
+ledge pose sways around a hand fixed to the lip; rebuild it (and the other ledge
+poses) with `python tools/build_ledge_sprites.py`.
 
 ## Controls
 
@@ -114,8 +123,9 @@ chiptune and SFX via WebAudio.
 | **Astra** the Starweaver | Floaty zoner | Starfall Trio · Comet Rush · Star Blink · Gravity Orb |
 | **Vesper** the Shade | Rushdown | Viper Flurry · Shadowstep Dash · Viper Ascendant · Smoke Counter |
 | **Rook** the Rift Brawler | Combo brawler | Rift Fist Combo · Rift Rising · Drone Grapple · Rune Mine |
+| **Marrow** the Hollow Knight | Heavy / sustain | Soul Reap · Wraith Charge · Grave Ascent · Hollow Guard |
 
-Neutral special is G; hold left or right + G for a side special, up + G (or jump + G) for recovery, and down + G for the down special. Running + F uses the fighter's dash attack. Valor chains blade cuts and Skyward Ascent follows up on opponents hit during its opening rise; Grim's rune strike is a wide quake that reaches in front of and behind him; Astra calls falling stars and can leave a comet on her dash attack; Vesper's flurry finishes with a launcher; Rook chains punches and can rise into a launching side special. All fighters' F attacks have extended reach, including tilts, smash attacks, aerials and dash attacks. The existing fighter sprites and attack animations are reused for these moves.
+Neutral special is G; hold left or right + G for a side special, up + G (or jump + G) for recovery, and down + G for the down special. Running + F uses the fighter's dash attack. Valor chains blade cuts and Skyward Ascent follows up on opponents hit during its opening rise; Grim's rune strike is a wide quake that reaches in front of and behind him; Astra calls falling stars and can leave a comet on her dash attack; Vesper's flurry finishes with a launcher; Rook chains punches and can rise into a launching side special. All fighters' F attacks have extended reach, including tilts, smash attacks, aerials and dash attacks. Marrow holds G to charge Soul Reap up to 2× damage after one second, and releases G to fire a spectral blast; a clean hit restores up to 2% damage. Up + G (or jump + G) performs Grave Ascent, a full-circle axe sweep that damages nearby foes once while launching him upward. Hollow Guard counters an incoming attack.
 
 ### Which build the browser is running
 

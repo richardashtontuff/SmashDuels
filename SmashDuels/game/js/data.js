@@ -249,7 +249,46 @@ const FIGHTERS = {
   },
 };
 
-const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook'];
+/* MARROW — a spectral halberd fighter with a deliberate, heavy moveset. */
+FIGHTERS.marrow = {
+  key:'marrow', artFacing:1, name:'MARROW', title:'THE HOLLOW KNIGHT', archetype:'Heavy / Sustain',
+  description:'A skull-helmed spectral knight in indigo armor, wielding a violet crescent halberd beneath a tattered purple cape.',
+  color:'#c47aff', theme:'#c47aff', body:{w:52,h:116},
+  stats:{weight:126,walk:2.0,run:5.2,air:3.7,fall:12.0,fastfall:19.2,gravity:.69,jumps:2,jumpV:12.5,djumpV:11.4,airJumps:1,size:1.12,traction:.52,airAccel:.28,dashFrames:12},
+  locomotion:'brute', weapon:'sword', weaponLen:60,
+  palettes:[
+    pal('Spectral','#e5dcc9','#1c1630','#26294d','#433270','#c47aff','#1b1b36'),
+    pal('Glacier','#ddeaf2','#253049','#355784','#a3d5e6','#77dfff','#1b344e'),
+    pal('Thorn','#d1d4bd','#1d3027','#35604d','#98caa1','#80e3a2','#1c3c30'),
+    pal('Crimson','#e3c9c2','#341c2d','#6b263c','#c36a7e','#ff6484','#401927'),
+    pal('Gilded','#e9d9ad','#372d25','#6e5833','#d5bd7b','#ffd777','#463519'),
+    pal('Obsidian','#aaa8b5','#14131b','#272633','#555163','#cab8ff','#17151f')
+  ],
+  moves:{
+    jab:mv({name:'Hollow Jabs',frames:26,startup:4,active:3,damage:4,bkb:9,kbs:25,angle:38,hitboxes:[hb(12,-67,60,38)]}),
+    ftilt:mv({name:'Halberd Sweep',frames:39,startup:8,active:5,damage:11,bkb:20,kbs:55,angle:38,hitboxes:[hb(12,-86,80,60)]}),
+    utilt:mv({name:'Crescent Lift',frames:37,startup:7,active:5,damage:10,bkb:21,kbs:57,angle:92,hitboxes:[hb(-26,-125,88,68)]}),
+    dtilt:mv({name:'Grave Sweep',frames:34,startup:6,active:4,damage:8,bkb:16,kbs:43,angle:20,hitboxes:[hb(8,-28,76,38)]}),
+    dashattack:mv({name:'Wraith Lunge',frames:43,startup:8,active:11,damage:12,bkb:25,kbs:50,angle:52,hitboxes:[hb(0,-88,78,70)]}),
+    fsmash:mv({name:'Soul Splitter',frames:59,startup:15,active:5,damage:20,bkb:31,kbs:96,angle:34,charge:1,hitboxes:[hb(12,-91,96,76)]}),
+    usmash:mv({name:'Grave Ascent',frames:55,startup:12,active:5,damage:18,bkb:28,kbs:90,angle:90,charge:1,hitboxes:[hb(-38,-136,105,78)]}),
+    dsmash:mv({name:'Phantom Circle',frames:52,startup:11,active:5,damage:16,bkb:24,kbs:83,angle:22,charge:1,hitboxes:[hb(-76,-33,90,44),hb(18,-33,90,44)]}),
+    nair:mv({name:'Spectral Wheel',frames:35,startup:5,active:8,damage:9,bkb:15,kbs:51,angle:45,hitboxes:[hb(-48,-90,102,76)]}),
+    fair:mv({name:'Crescent Air',frames:40,startup:8,active:5,damage:13,bkb:20,kbs:62,angle:40,hitboxes:[hb(12,-96,82,68)]}),
+    bair:mv({name:'Back Reaper',frames:38,startup:7,active:5,damage:14,bkb:22,kbs:68,angle:148,hitboxes:[hb(-92,-92,78,64)]}),
+    uair:mv({name:'Soul Lift',frames:36,startup:6,active:5,damage:11,bkb:17,kbs:60,angle:88,hitboxes:[hb(-38,-131,82,64)]}),
+    dair:mv({name:'Gravefall',frames:42,startup:10,active:5,damage:14,bkb:19,kbs:60,angle:268,spike:1,hitboxes:[hb(-28,-18,60,66)]})
+  },
+  specials:{
+    neutral:{name:'SOUL REAP',desc:'Hold G, release a spectral blast (up to 2x damage); clean hits heal 2%',type:'soulreap',frames:46,startup:9,active:5,damage:11,bkb:22,kbs:48,angle:55,cooldown:28,chargeFrames:60,chargeMax:2,projectileSpeed:12,projectileLife:70,healOnHit:2},
+    side:{name:'WRAITH CHARGE',desc:'A committed forward halberd rush',type:'dash',frames:45,startup:8,active:14,damage:13,bkb:26,kbs:58,angle:52,rushSpeed:11,dist:150,hitboxes:[hb(4,-85,78,72)]},
+    up:{name:'GRAVE ASCENT',desc:'Rise with a full-circle spectral axe sweep',type:'recover',frames:42,startup:3,active:20,damage:10,bkb:19,kbs:47,angle:82,rise:11.75,drift:3.8,spinAxe:true,hitboxes:[hb(-78,-120,156,112)]},
+    down:{name:'HOLLOW GUARD',desc:'Counter an incoming strike',type:'counter',frames:40,startup:1,window:19,mult:1.4}
+  },
+  finalSmash:{name:'HOLLOW REQUIEM',type:'spin',duration:150,damage:45},
+  grabRange:50,throwDmg:{f:9,b:11,u:8,d:7}
+};
+const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow'];
 
 /* ============================================================
    FRAME-DATA TUNING PASS  —  one place, so every fighter moves alike

@@ -857,10 +857,11 @@ class Fighter {
     // — overwriting `type` with 'special' made every special-type branch dead
     this.action = Object.assign({}, sp, { dur: sp.frames, kind: 'special', specialType: sp.type, type: 'special', specialKey: dir, poseType: 'special', specialDir: dir });
     this.actionT = 0; this.hitIds = new Map(); this.hitCount = new Map(); this.specPhase = 'startup';
+    this.charging = sp.type === 'soulreap'; this.chargeT = 0; this.forceRelease = false;
     if (sp.cooldown) this.cooldowns[dir] = sp.cooldown;
     this.specialData = { fired: 0, timer: 0, projFired: false, orbFired: false, dashFired: false, tpFired: false, lassoFired: false, riseHit: false, mineFired: false };
     if (dir === 'u') { this.usedUpB = true; this.fastfalled = false; }
-    AUDIO.sfx('swing');
+    AUDIO.sfx(sp.type === 'soulreap' ? 'shieldUp' : 'swing');
     return true;
   }
 
@@ -950,6 +951,30 @@ class Fighter {
   updateAction(match) {
     const a = this.action;
     if (!a) { this.state = 'idle'; return false; }
+    // Soul Reap holds the action clock before startup. Releasing G commits the
+    // stored power, even if G was buffered and released before the action began.
+    // Charge is capped but stays held until release; an interruption cancels it.
+    if (a.type === 'special' && a.specialType === 'soulreap' && this.charging) {
+      if (this.input.special) {
+        this.chargeT = Math.min(a.chargeFrames, this.chargeT + 1);
+        this.actionT = 0;
+        this.vx *= 0.8;
+        match.fx.charge(this.x + this.facing * 16 * this.scale, this.y - 65 * this.scale, this.pal.accent, this.chargeT);
+        if (this.chargeT === a.chargeFrames && !a.fullChargeCue) {
+          a.fullChargeCue = true; AUDIO.sfx('beep');
+          match.fx.ring(this.x, this.y - 60 * this.scale, this.pal.accent, 70 * this.scale, 18);
+        }
+        return true;
+      }
+      const power = clamp(this.chargeT / a.chargeFrames, 0, 1);
+      a.chargeMultiplier = 1 + (a.chargeMax - 1) * power;
+      a.damage *= a.chargeMultiplier;
+      this.charging = false;
+      this.actionT = 0;
+      if (a.cooldown) this.cooldowns.n = a.cooldown;
+      match.fx.burst(this.x + this.facing * 30 * this.scale, this.y - 65 * this.scale, this.pal.accent, 5 + Math.round(power * 9), 3 + power * 3);
+      AUDIO.sfx('swing');
+    }
     this.actionT++;
     const t = this.actionT;
 
@@ -1097,6 +1122,20 @@ class Fighter {
     }
     switch (sp.specialKey) {
       case 'n': {
+        if (sp.type === 'soulreap' && t >= sp.startup && !s.projFired) {
+          s.projFired = true;
+          const power = clamp(((sp.chargeMultiplier || 1) - 1) / (sp.chargeMax - 1), 0, 1);
+          const x = this.x + this.facing * 25 * this.scale, y = this.y - 62 * this.scale;
+          match.spawnProjectile({ owner: this, x, y, vx: this.facing * sp.projectileSpeed,
+            damage: sp.damage, bkb: sp.bkb, kbs: sp.kbs,
+            angle: this.facing < 0 ? 180 - sp.angle : sp.angle,
+            life: sp.projectileLife, color: this.pal.accent,
+            size: (13 + 8 * power) * this.scale, kind: 'soulblast',
+            chargePower: power, healOnHit: sp.healOnHit });
+          match.fx.muzzle(x, y, this.pal.accent, this.facing);
+          match.fx.ring(x, y, this.pal.accent, (35 + 25 * power) * this.scale, 12);
+          AUDIO.sfx('shoot');
+        }
         if (sp.type === 'starfall' && s.fired < 3 && t >= sp.startup + s.fired * 6) {
           const i = s.fired++;
           const x = this.x + this.facing * (85 + i * 45) * this.scale;
@@ -1184,7 +1223,16 @@ class Fighter {
               if (this.key === 'rook') match.fx.lines.push({ x1: this.x, y1: this.y - 55, x2: this.x + this.facing * 18, y2: this.y - 135, color: this.pal.accent, w: 3, life: 5, t: 0 });
             }
           }
-          if (sp.ascentCombo) {
+          if (sp.spinAxe) {
+            // Collision is resolved by the normal active-box path above, once
+            // per opponent, for the whole rising spin (including behind us).
+            if (t >= sp.startup && t < sp.startup + sp.active && (t - sp.startup) % 5 === 0) {
+              match.fx.arc(this.x, this.y - 57 * this.scale,
+                -Math.PI / 2 + (t - sp.startup) * TAU / sp.active * this.facing,
+                this.pal.accent, 72 * this.scale, 9, this.facing);
+              if (t === sp.startup) AUDIO.sfx('swing');
+            }
+          } else if (sp.ascentCombo) {
             this.updateAscentCombo(match, sp, t, s);
           } else if (t >= sp.startup + 2 && !s.riseHit) { s.riseHit = true;
             match.aoeHit(this, this.x, this.y - 70, 62, sp.damage, sp.bkb, sp.kbs, sp.angle);
@@ -1376,7 +1424,7 @@ class Fighter {
         // The new signature attacks use facing-relative launch angles, just as
         // their hitboxes mirror. A left-facing strike must launch left, not right.
         const signature = a.finish || a.key === 'dashattack' ||
-          (a.type === 'special' && ['bladecombo', 'flurry', 'punchcombo', 'quake', 'risingdash', 'dash'].includes(a.specialType));
+          (a.type === 'special' && ['bladecombo', 'flurry', 'punchcombo', 'quake', 'risingdash', 'dash', 'soulreap'].includes(a.specialType));
         const launchLeft = a.specialType === 'quake' ? target.x < this.x : this.facing < 0;
         const hitAngle = signature && launchLeft ? 180 - hit.angle : hit.angle;
         match.hitFighter(this, target, {
