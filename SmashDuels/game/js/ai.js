@@ -93,19 +93,29 @@ class CPU {
     } else if (this.plan === 'ledge') {
       // recover handled elsewhere
     }
+    // If an opponent is underneath a pass-through platform, do not idle above
+    // them forever just because horizontal distance is small.
+    if (this.target && f.onGround && f.onPlatform && this.target.y > f.y + 75 &&
+        Math.abs(this.target.x - f.x) < 130 && f.canAct() && f.state !== 'land') {
+      o.down = true; o.shield = false; o.attack = false; o.special = false;
+    }
     // item pickup
     if (this.level >= 3) {
       let near = null, nd = 130;
       for (const it of match.items) {
-        if (it.heldBy || it.smashBall) continue;
+        if (it.dead || it.heldBy || it.smashBall || it.spawnT > 0 || it.cooldown > 0) continue;
         const d = Math.hypot(it.x - f.x, it.y - f.y);
         if (d < nd) { nd = d; near = it; }
       }
-      if (near && this.plan !== 'attack') { o[near.x > f.x ? 'right' : 'left'] = true; }
-      if (near && Math.abs(near.x - f.x) < 34 && Math.abs(near.y - f.y) < 60) match.tryPickup(f);
-      if (f.held && this.target && Math.abs(this.target.x - f.x) < 420) {
-        if (chance(0.06 * this.level)) { this.useItemOrThrow(match); }
+      if (near && this.plan !== 'attack' && Math.abs(near.y - f.y) < 90) {
+        // Item pursuit overrides the combat direction rather than pressing both.
+        o.left = o.right = false;
+        o[near.x > f.x ? 'right' : 'left'] = true;
       }
+      // Fighters pick up on contact in their own action step. CPUs use the
+      // same input path as players instead of firing through hitstun/actions.
+      if (f.held && f.held.def.cat !== 'batter' && f.held.type !== 'hammer' && this.target &&
+          Math.abs(this.target.x - f.x) < 420 && f.canAct() && chance(0.06 * this.level)) o.grab = true;
     }
     // smash ball priority
     const sb = match.items.find(it => it.smashBall && !it.dead);
@@ -171,10 +181,10 @@ class CPU {
     const lvl = this.level;
     const hasItem = !!f.held;
 
-    if (hasItem && chance(0.25)) { this.useItemOrThrow(match); return; }
+    if (hasItem && f.held.def.cat !== 'batter' && f.held.type !== 'hammer' && chance(0.25)) { this.press.grab = 2; return; }
     if (adx < f.def.grabRange + 8 && Math.abs(dy) < 40) {
       if (f.damage > 70) { this.plan = 'defend'; this.timer = 12; this.press.shield = 8; return; }
-      if (chance(0.45 - 0.03 * lvl)) { this.press.grab = 2; this.attackCd = 40; return; }
+      if (!hasItem && chance(0.45 - 0.03 * lvl)) { this.press.grab = 2; this.attackCd = 40; return; }
       if (f.damage > 70) { this.plan = 'defend'; this.timer = 12; this.press.shield = 8; return; }
     }
     if (this.attackCd > 0) return;
@@ -196,13 +206,6 @@ class CPU {
       else { this.press[dx > 0 ? 'right' : 'left'] = 2; this.press.attack = 2; }
       this.attackCd = 18;
     }
-  }
-
-  useItemOrThrow(match) {
-    const f = this.f;
-    if (!f.held) return;
-    if (f.held.def.cat === 'shoot' || f.held.def.cat === 'batter') match.useHeld(f);
-    else match.throwHeld(f);
   }
 
   recover(match) {

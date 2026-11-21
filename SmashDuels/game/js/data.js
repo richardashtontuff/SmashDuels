@@ -5,7 +5,7 @@
 
 const WORLD = {
   W: 1600, H: 1000,
-  blast: { left: -1250, right: 1250, top: -900, bottom: 780 },
+  blast: { left: -1550, right: 1550, top: -1150, bottom: 780 },
   respawnY: -420,
   gravityCap: 26,
 };
@@ -48,7 +48,7 @@ const FIGHTERS = {
       ftilt: mv({ name: 'Sword Arc', frames: 32, startup: 6, active: 4, damage: 9, bkb: 18, kbs: 52, angle: 32, reach: 54, hitboxes: [hb(18, -66, 56, 46)] }),
       utilt: mv({ name: 'Rising Arc', frames: 32, startup: 5, active: 5, damage: 8, bkb: 20, kbs: 56, angle: 96, hitboxes: [hb(-20, -110, 74, 58)] }),
       dtilt: mv({ name: 'Low Sweep', frames: 28, startup: 4, active: 3, damage: 7, bkb: 16, kbs: 42, angle: 18, hitboxes: [hb(14, -26, 52, 28)] }),
-      dashattack: mv({ name: 'Lunge', frames: 38, startup: 5, active: 11, damage: 10, bkb: 26, kbs: 46, angle: 40, hitboxes: [hb(6, -86, 62, 78)] }),
+      dashattack: mv({ name: 'Crescent Lunge', frames: 38, startup: 5, active: 11, damage: 10, bkb: 26, kbs: 46, angle: 58, hitboxes: [hb(6, -86, 62, 78)] }),
       fsmash: mv({ name: 'Lunar Cleave', frames: 52, startup: 12, active: 4, damage: 16, bkb: 30, kbs: 92, angle: 33, reach: 62, charge: 1, hitboxes: [hb(16, -76, 70, 60)] }),
       usmash: mv({ name: 'Starfall', frames: 46, startup: 9, active: 5, damage: 15, bkb: 26, kbs: 88, angle: 88, charge: 1, hitboxes: [hb(-30, -122, 92, 66)] }),
       dsmash: mv({ name: 'Twin Sweep', frames: 46, startup: 8, active: 4, damage: 13, bkb: 24, kbs: 82, angle: 22, charge: 1, hitboxes: [hb(-56, -22, 66, 34), hb(16, -22, 66, 34)] }),
@@ -59,13 +59,13 @@ const FIGHTERS = {
       dair: mv({ name: 'Meteor Point', frames: 36, startup: 7, active: 4, damage: 12, bkb: 18, kbs: 58, angle: 268, hitboxes: [hb(-24, -18, 52, 58)], spike: 1 }),
     },
     specials: {
-      neutral: { name: 'LUNAR SLASH', desc: 'Crescent projectile', type: 'projectile', frames: 40, startup: 10, damage: 8, bkb: 14, kbs: 40, angle: 40, cooldown: 26 },
+      neutral: { name: 'CRESCENT COMBO', desc: 'Two sweeping blade cuts with a rising finish', type: 'bladecombo', frames: 42, startup: 6, active: 13, damage: 4, bkb: 3, kbs: 4, angle: 70, multi: 1, rehit: 7, finish: { damage: 7, bkb: 20, kbs: 52, angle: 72 }, hitboxes: [hb(8, -88, 90, 70)] },
       /* A rush special is a body travelling through someone else, so it carries a hitbox
          like any melee move: `active` is how many ticks the authored `dist` takes at the
-         rush speed (12 px/tick), and the box is the fighter's own dash attack, widened a
+         rush speed, and the box is the fighter's own dash attack, widened a
          touch because the whole body commits to this one. */
-      side: { name: 'RUSH STRIKE', desc: 'Dashing blade rush', type: 'dash', frames: 44, startup: 8, damage: 12, bkb: 24, kbs: 58, angle: 40, dist: 150, active: 13, hitboxes: [hb(8, -64, 64, 48)] },
-      up: { name: 'SKYWARD ASCENT', desc: 'Rising recovery', type: 'recover', frames: 40, startup: 3, damage: 9, bkb: 18, kbs: 46, angle: 80, rise: 9.2, drift: 4.2 },
+      side: { name: 'SKYSLASH RUSH', desc: 'A quick sword rush that launches upward', type: 'dash', frames: 44, startup: 8, damage: 12, bkb: 24, kbs: 58, angle: 70, rushSpeed: 14, dist: 150, active: 13, hitboxes: [hb(8, -64, 64, 48)] },
+      up: { name: 'SKYWARD ASCENT', desc: 'Rising recovery with follow-up strikes on hit', type: 'recover', frames: 40, startup: 3, damage: 12, bkb: 18, kbs: 46, angle: 80, rise: 9.2, drift: 4.2, ascentCombo: { opening: 3, follow: 3, finish: 6, interval: 5, reach: 150 } },
       down: { name: 'GUARDIAN STANCE', desc: 'Counter stance', type: 'counter', frames: 40, startup: 1, window: 20, mult: 1.35 },
     },
     finalSmash: { name: 'BLADE TEMPEST', type: 'spin', duration: 150, damage: 42 },
@@ -96,7 +96,7 @@ const FIGHTERS = {
       ftilt: mv({ name: 'Overhand', frames: 40, startup: 10, active: 4, damage: 13, bkb: 24, kbs: 60, angle: 38, hitboxes: [hb(14, -84, 66, 66)] }),
       utilt: mv({ name: 'Rising Rock', frames: 38, startup: 8, active: 5, damage: 11, bkb: 24, kbs: 62, angle: 92, hitboxes: [hb(-26, -122, 84, 60)] }),
       dtilt: mv({ name: 'Ground Pound', frames: 34, startup: 7, active: 3, damage: 9, bkb: 20, kbs: 46, angle: 25, hitboxes: [hb(6, -22, 64, 32)] }),
-      dashattack: mv({ name: 'Freight Train', frames: 46, startup: 9, active: 13, damage: 14, bkb: 30, kbs: 50, angle: 42, hitboxes: [hb(-4, -92, 74, 84)] }),
+      dashattack: mv({ name: 'Boulder Breaker', frames: 46, startup: 9, active: 13, damage: 14, bkb: 30, kbs: 50, angle: 70, hitboxes: [hb(-4, -92, 74, 84)] }),
       fsmash: mv({ name: 'Continental Punch', frames: 62, startup: 18, active: 5, damage: 23, bkb: 34, kbs: 100, angle: 30, charge: 1, hitboxes: [hb(14, -90, 82, 78)] }),
       usmash: mv({ name: 'Tectonic Rise', frames: 58, startup: 14, active: 5, damage: 20, bkb: 30, kbs: 94, angle: 90, charge: 1, hitboxes: [hb(-38, -130, 108, 78)] }),
       dsmash: mv({ name: 'Seismic Slam', frames: 56, startup: 13, active: 5, damage: 18, bkb: 26, kbs: 88, angle: 20, charge: 1, hitboxes: [hb(-74, -30, 88, 42), hb(20, -30, 88, 42)] }),
@@ -107,8 +107,8 @@ const FIGHTERS = {
       dair: mv({ name: 'Meteor Slam', frames: 44, startup: 11, active: 5, damage: 16, bkb: 20, kbs: 62, angle: 268, hitboxes: [hb(-30, -18, 62, 66)], spike: 1 }),
     },
     specials: {
-      neutral: { name: 'MAGMA FIST', desc: 'Heavy fireball', type: 'projectile', frames: 48, startup: 14, damage: 12, bkb: 20, kbs: 52, angle: 35, cooldown: 34, big: 1 },
-      side: { name: 'RUSH STRIKE', desc: 'Shoulder charge', type: 'dash', frames: 52, startup: 12, damage: 16, bkb: 30, kbs: 62, angle: 38, dist: 170, active: 14, hitboxes: [hb(-8, -78, 76, 62)] },
+      neutral: { name: 'FAULTLINE SMASH', desc: 'A wide ground-shaking rune strike', type: 'quake', frames: 48, startup: 10, active: 5, damage: 15, bkb: 26, kbs: 60, angle: 68, hitboxes: [hb(-60, -76, 220, 76)] },
+      side: { name: 'BOULDER CRASH', desc: 'A heavy shoulder charge with brief invulnerability', type: 'dash', frames: 52, startup: 12, damage: 16, bkb: 30, kbs: 62, angle: 38, rushSpeed: 10, rushInvuln: 10, dist: 170, active: 14, hitboxes: [hb(-8, -78, 76, 62)] },
       up: { name: 'TITAN RISE', desc: 'Erupting uppercut', type: 'recover', frames: 48, startup: 4, damage: 13, bkb: 22, kbs: 50, angle: 85, rise: 9.8, drift: 3.2 },
       down: { name: 'GUARDIAN STANCE', desc: 'Stone guard + quake', type: 'counter', frames: 46, startup: 1, window: 22, mult: 1.5 },
     },
@@ -140,7 +140,7 @@ const FIGHTERS = {
       ftilt: mv({ name: 'Crescent Push', frames: 34, startup: 7, active: 5, damage: 8, bkb: 16, kbs: 46, angle: 35, hitboxes: [hb(16, -72, 66, 48)] }),
       utilt: mv({ name: 'Star Lift', frames: 34, startup: 6, active: 5, damage: 7, bkb: 18, kbs: 52, angle: 95, hitboxes: [hb(-26, -116, 76, 60)] }),
       dtilt: mv({ name: 'Comet Sweep', frames: 30, startup: 5, active: 4, damage: 6, bkb: 14, kbs: 38, angle: 20, hitboxes: [hb(10, -24, 58, 28)] }),
-      dashattack: mv({ name: 'Nova Rush', frames: 40, startup: 6, active: 11, damage: 9, bkb: 22, kbs: 42, angle: 42, hitboxes: [hb(4, -84, 64, 68)] }),
+      dashattack: mv({ name: 'Comet Trail', signature: 'comet', frames: 40, startup: 6, active: 11, damage: 9, bkb: 22, kbs: 42, angle: 42, hitboxes: [hb(4, -84, 64, 68)] }),
       fsmash: mv({ name: 'Starfall Arc', frames: 54, startup: 13, active: 5, damage: 15, bkb: 26, kbs: 84, angle: 36, charge: 1, hitboxes: [hb(12, -86, 84, 70)] }),
       usmash: mv({ name: 'Constellation', frames: 50, startup: 10, active: 6, damage: 13, bkb: 24, kbs: 82, angle: 90, charge: 1, hitboxes: [hb(-36, -132, 104, 74)] }),
       dsmash: mv({ name: 'Gravity Well', frames: 50, startup: 10, active: 5, damage: 12, bkb: 22, kbs: 76, angle: 18, charge: 1, hitboxes: [hb(-76, -26, 92, 40), hb(18, -26, 92, 40)] }),
@@ -151,8 +151,8 @@ const FIGHTERS = {
       dair: mv({ name: 'Star Spike', frames: 38, startup: 8, active: 5, damage: 11, bkb: 16, kbs: 54, angle: 265, hitboxes: [hb(-26, -18, 56, 62)], spike: 1 }),
     },
     specials: {
-      neutral: { name: 'SHOOTING STAR BOLT', desc: 'Piercing star bolt', type: 'projectile', frames: 42, startup: 11, damage: 7, bkb: 12, kbs: 38, angle: 38, cooldown: 24, pierce: 1 },
-      side: { name: 'COMET RUSH', desc: 'Trailing comet dash', type: 'dash', frames: 46, startup: 9, damage: 10, bkb: 22, kbs: 52, angle: 42, dist: 165, float: 1, active: 14, hitboxes: [hb(-2, -72, 62, 56)] },
+      neutral: { name: 'STARFALL TRIO', desc: 'Call three falling stars ahead of you', type: 'starfall', frames: 50, startup: 8, damage: 4, bkb: 8, kbs: 25, angle: 60, cooldown: 32 },
+      side: { name: 'COMET RUSH', desc: 'A floating dash with a star trail', type: 'dash', frames: 46, startup: 9, damage: 10, bkb: 22, kbs: 52, angle: 42, rushSpeed: 11, dist: 165, float: 1, active: 14, hitboxes: [hb(-2, -72, 62, 56)] },
       up: { name: 'STAR BLINK', desc: 'Teleport recovery', type: 'teleport', frames: 40, startup: 8, damage: 8, bkb: 16, kbs: 40, angle: 80, dist: 210 },
       down: { name: 'GRAVITY ORB', desc: 'Pulling void orb', type: 'orb', frames: 46, startup: 12, damage: 2, bkb: 4, kbs: 6, angle: 90, cooldown: 40 },
     },
@@ -184,7 +184,7 @@ const FIGHTERS = {
       ftilt: mv({ name: 'Cross Slash', frames: 26, startup: 4, active: 3, damage: 7, bkb: 14, kbs: 44, angle: 34, hitboxes: [hb(12, -64, 50, 40)] }),
       utilt: mv({ name: 'Fan Kick', frames: 26, startup: 4, active: 4, damage: 6, bkb: 14, kbs: 48, angle: 92, hitboxes: [hb(-22, -108, 68, 52)] }),
       dtilt: mv({ name: 'Low Sting', frames: 24, startup: 3, active: 3, damage: 5, bkb: 12, kbs: 34, angle: 16, hitboxes: [hb(10, -22, 46, 26)] }),
-      dashattack: mv({ name: 'Shredding Dash', frames: 34, startup: 4, active: 10, damage: 8, bkb: 18, kbs: 40, angle: 40, hitboxes: [hb(2, -80, 58, 62)] }),
+      dashattack: mv({ name: 'Shredding Dash', frames: 34, startup: 4, active: 10, damage: 3, bkb: 2, kbs: 2, angle: 70, multi: 1, finish: { damage: 6, bkb: 18, kbs: 40, angle: 46 }, hitboxes: [hb(2, -80, 58, 62)] }),
       fsmash: mv({ name: 'Twin Fang', frames: 44, startup: 9, active: 4, damage: 13, bkb: 24, kbs: 84, angle: 32, charge: 1, hitboxes: [hb(10, -70, 62, 52)] }),
       usmash: mv({ name: 'Viper Rise', frames: 42, startup: 8, active: 5, damage: 12, bkb: 22, kbs: 80, angle: 88, charge: 1, hitboxes: [hb(-30, -118, 84, 62)] }),
       dsmash: mv({ name: 'Low Twin Slash', frames: 42, startup: 8, active: 4, damage: 11, bkb: 20, kbs: 76, angle: 20, charge: 1, hitboxes: [hb(-62, -24, 76, 36), hb(14, -24, 76, 36)] }),
@@ -195,7 +195,7 @@ const FIGHTERS = {
       dair: mv({ name: 'Kunai Spike', frames: 32, startup: 6, active: 4, damage: 10, bkb: 14, kbs: 50, angle: 265, hitboxes: [hb(-22, -16, 46, 56)], spike: 1 }),
     },
     specials: {
-      neutral: { name: 'KUNAI BARRAGE', desc: '3-way kunai spread', type: 'projectile', frames: 40, startup: 8, damage: 5, bkb: 10, kbs: 30, angle: 30, cooldown: 22, spread: 3 },
+      neutral: { name: 'VIPER FLURRY', desc: 'Three rapid blade strikes ending in a launcher', type: 'flurry', frames: 40, startup: 4, active: 13, damage: 2, bkb: 2, kbs: 2, angle: 70, multi: 2, rehit: 5, finish: { damage: 5, bkb: 16, kbs: 44, angle: 78 }, hitboxes: [hb(4, -78, 67, 64)] },
       side: { name: 'SHADOWSTEP DASH', desc: 'Blink through foes', type: 'teleport', frames: 40, startup: 6, damage: 9, bkb: 20, kbs: 48, angle: 40, dist: 190 },
       up: { name: 'VIPER ASCENDANT', desc: 'Rising kick', type: 'recover', frames: 38, startup: 3, damage: 8, bkb: 16, kbs: 44, angle: 82, rise: 9.4, drift: 4.6 },
       down: { name: 'SMOKE COUNTER', desc: 'Counter + smoke', type: 'counter', frames: 38, startup: 1, window: 18, mult: 1.25 },
@@ -224,11 +224,11 @@ const FIGHTERS = {
       pal('Onyx', '#c0a088', '#14141a', '#1e2228', '#0c0e12', '#ffd23a', '#101318'),
     ],
     moves: {
-      jab: mv({ name: 'Driving Punch', frames: 24, startup: 3, active: 3, damage: 4, bkb: 8, kbs: 24, angle: 34, hitboxes: [hb(12, -62, 54, 32)] }),
+      jab: mv({ name: 'Rapid Fists', frames: 24, startup: 3, active: 3, damage: 2, bkb: 2, kbs: 2, angle: 70, multi: 2, finish: { damage: 4, bkb: 12, kbs: 32, angle: 48 }, hitboxes: [hb(12, -62, 54, 32)] }),
       ftilt: mv({ name: 'Sweeping Strike', frames: 32, startup: 6, active: 4, damage: 8, bkb: 16, kbs: 48, angle: 33, hitboxes: [hb(14, -70, 62, 44)] }),
       utilt: mv({ name: 'Rising Uppercut', frames: 32, startup: 5, active: 5, damage: 7, bkb: 18, kbs: 54, angle: 94, hitboxes: [hb(-24, -114, 74, 56)] }),
       dtilt: mv({ name: 'Low Shot', frames: 30, startup: 5, active: 4, damage: 6, bkb: 14, kbs: 38, angle: 18, hitboxes: [hb(12, -24, 56, 28)] }),
-      dashattack: mv({ name: 'Sliding Shot', frames: 38, startup: 6, active: 11, damage: 9, bkb: 20, kbs: 44, angle: 40, hitboxes: [hb(4, -84, 66, 70)] }),
+      dashattack: mv({ name: 'Rift Slide Kick', frames: 38, startup: 6, active: 11, damage: 9, bkb: 20, kbs: 44, angle: 76, hitboxes: [hb(4, -84, 66, 70)] }),
       fsmash: mv({ name: 'Charged Hex Blast', frames: 56, startup: 15, active: 5, damage: 16, bkb: 28, kbs: 86, angle: 34, charge: 1, hitboxes: [hb(10, -78, 92, 66)] }),
       usmash: mv({ name: 'Rune Pillar', frames: 50, startup: 11, active: 6, damage: 13, bkb: 24, kbs: 84, angle: 90, charge: 1, hitboxes: [hb(-30, -128, 96, 76)] }),
       dsmash: mv({ name: 'Trap Burst', frames: 50, startup: 11, active: 5, damage: 12, bkb: 22, kbs: 78, angle: 18, charge: 1, hitboxes: [hb(-70, -24, 88, 38), hb(18, -24, 88, 38)] }),
@@ -239,8 +239,8 @@ const FIGHTERS = {
       dair: mv({ name: 'Falling Fist', frames: 38, startup: 8, active: 5, damage: 11, bkb: 16, kbs: 54, angle: 264, hitboxes: [hb(-24, -16, 52, 60)], spike: 1 }),
     },
     specials: {
-      neutral: { name: 'HEX BULLET VOLLEY', desc: '3-round burst', type: 'projectile', frames: 44, startup: 10, damage: 4, bkb: 8, kbs: 26, angle: 34, cooldown: 26, burst: 3 },
-      side: { name: 'RUNE LASSO', desc: 'Pulling hex chain', type: 'lasso', frames: 46, startup: 12, damage: 7, bkb: 16, kbs: 36, angle: 30, dist: 230 },
+      neutral: { name: 'RIFT FIST COMBO', desc: 'A rapid punch combination with a heavy finish', type: 'punchcombo', frames: 44, startup: 5, active: 13, damage: 3, bkb: 2, kbs: 2, angle: 70, multi: 2, rehit: 5, finish: { damage: 6, bkb: 20, kbs: 50, angle: 48 }, hitboxes: [hb(6, -76, 70, 60)] },
+      side: { name: 'RIFT RISING', desc: 'An advancing rising strike that launches foes', type: 'risingdash', frames: 44, startup: 5, active: 12, damage: 11, bkb: 22, kbs: 55, angle: 82, dist: 115, hitboxes: [hb(4, -92, 70, 80)] },
       up: { name: 'DRONE GRAPPLE', desc: 'Drone-assisted rising boost', type: 'recover', frames: 44, startup: 5, damage: 6, bkb: 12, kbs: 34, angle: 84, rise: 8.6, drift: 5.4 },
       down: { name: 'RUNE MINE', desc: 'Placed proximity trap', type: 'mine', frames: 40, startup: 12, damage: 11, bkb: 20, kbs: 52, angle: 60, cooldown: 44 },
     },
@@ -284,6 +284,21 @@ function tuneFamily(kind) {
    used to check `t <= startup + active`, which made every move hit for one tick
    longer than it was written, and put that extra tick past the end of the
    animation window. */
+// F attacks keep their original frames and damage, but reach farther in the
+// direction each authored box covers. Centered attacks grow on both sides.
+function extendAttackBox(box) {
+  const b = Object.assign({}, box);
+  const dx = box.w * 0.25, dy = box.h * 0.15;
+  const centerX = box.x + box.w / 2;
+  if (centerX < -box.w * 0.2) b.x -= dx;
+  else if (centerX <= box.w * 0.2) b.x -= dx / 2;
+  b.w += dx;
+  const centerY = box.y + box.h / 2;
+  if (centerY < -65) b.y -= dy;
+  else if (centerY < -35) b.y -= dy / 2;
+  b.h += dy;
+  return b;
+}
 function tuneMove(m, kind, weight) {
   const fam = tuneFamily(kind), t = TUNE[fam];
   const startup = Math.max(kind === 'jab' ? 2 : 3, Math.min(m.startup, Math.round(m.startup * t.startup)));
@@ -292,6 +307,7 @@ function tuneMove(m, kind, weight) {
     Math.round(Math.max(0, m.frames - m.startup - (m.active || 1)) * t.tail));
   const out = Object.assign({}, m, {
     startup, active, tail, frames: Math.max(t.floor, startup + active + tail),
+    hitboxes: m.hitboxes ? m.hitboxes.map(extendAttackBox) : m.hitboxes,
   });
   // A heavier fighter lands heavier: aerials get their lag from the landing,
   // which is what makes floaty characters feel light and Grim feel like a rock.
@@ -548,9 +564,9 @@ const STAGE_KEYS = Object.keys(STAGES);
    ITEMS  (GDD §8)
    ============================================================ */
 const ITEMS = {
-  beamsword: { name: 'BEAM SWORD', cat: 'batter', color: '#7ad4ff', icon: 'sword', dmg: 11, bkb: 18, kbs: 60, reach: 60 },
-  homerunbat: { name: 'HOME-RUN BAT', cat: 'batter', color: '#c8a06a', icon: 'bat', dmg: 22, bkb: 40, kbs: 110, reach: 58, smashKO: 1 },
-  starrod: { name: 'STAR ROD', cat: 'batter', color: '#ffd23a', icon: 'rod', dmg: 9, bkb: 16, kbs: 48, reach: 52, shoot: 1 },
+  beamsword: { name: 'BEAM SWORD', cat: 'batter', color: '#7ad4ff', icon: 'sword', dmg: 11, bkb: 18, kbs: 60, reach: 60, perk: 'reach' },
+  homerunbat: { name: 'HOME-RUN BAT', cat: 'batter', color: '#c8a06a', icon: 'bat', dmg: 22, bkb: 40, kbs: 110, reach: 58, smashKO: 1, perk: 'launch' },
+  starrod: { name: 'STAR ROD', cat: 'batter', color: '#ffd23a', icon: 'rod', dmg: 9, bkb: 16, kbs: 48, reach: 52, shoot: 1, perk: 'star' },
   bobomb: { name: 'BOB-OMB', cat: 'throw', color: '#3a4a8a', icon: 'bomb', dmg: 26, bkb: 34, kbs: 70, radius: 120 },
   shell: { name: 'GREEN SHELL', cat: 'throw', color: '#4ac85a', icon: 'shell', dmg: 13, bkb: 22, kbs: 55, radius: 46 },
   bumper: { name: 'BUMPER', cat: 'throw', color: '#e84a6a', icon: 'bumper', dmg: 8, bkb: 30, kbs: 40, radius: 40 },
@@ -569,10 +585,10 @@ const ITEMS = {
   riftorb: { name: 'RIFT ORB', cat: 'summon', color: '#c77dff', icon: 'orb', dur: 480, summon: 'sprite' },
   assist: { name: 'SIGIL TROPHY', cat: 'summon', color: '#22e08a', icon: 'trophy', dur: 480, summon: 'sigil' },
   smashball: { name: 'SMASH BALL', cat: 'special', color: '#ffe04a', icon: 'smash', hp: 120 },
-  hammer: { name: 'HAMMER', cat: 'special', color: '#c8a06a', icon: 'hammer', dur: 480, dmg: 18, headless: 0.25 },
+  hammer: { name: 'HAMMER', cat: 'special', color: '#c8a06a', icon: 'hammer', dur: 480, dmg: 18, headless: 0.25, perk: 'heavy' },
 };
 const ITEM_KEYS = Object.keys(ITEMS);
-const ITEM_POOL_COMMON = ['beamsword', 'homerunbat', 'starrod', 'bobomb', 'shell', 'bumper', 'raygun', 'fireflower', 'heart', 'tomato', 'food', 'food', 'star', 'mushroom', 'poison', 'metalbox', 'bunnyhood', 'crate', 'capsule', 'riftorb', 'assist'];
+const ITEM_POOL_COMMON = ['beamsword', 'homerunbat', 'starrod', 'bobomb', 'shell', 'bumper', 'raygun', 'fireflower', 'heart', 'tomato', 'food', 'food', 'star', 'mushroom', 'poison', 'metalbox', 'bunnyhood', 'crate', 'capsule', 'riftorb', 'assist', 'hammer'];
 
 /* ============================================================
    RULES DEFAULTS

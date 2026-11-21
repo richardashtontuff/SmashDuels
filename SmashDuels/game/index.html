@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
 <title>RIFT RUMBLE — a platform fighter</title>
-<link rel="stylesheet" href="css/style.css?v=K24">
-<link rel="stylesheet" href="css/ui-refresh.css?v=K24">
-<link rel="stylesheet" href="css/ui-fx.css?v=K24">
+<link rel="stylesheet" href="css/style.css?v=K28">
+<link rel="stylesheet" href="css/ui-refresh.css?v=K28">
+<link rel="stylesheet" href="css/ui-fx.css?v=K28">
 </head>
 <body>
 <div id="app">
@@ -52,7 +52,7 @@
           <div class="mode-preview" aria-live="polite"><span class="mode-preview-index">01 / BATTLE</span><span class="mode-preview-copy">A CUSTOM BATTLE FOR UP TO FOUR FIGHTERS</span><span class="mode-preview-mark" aria-hidden="true">◆</span></div>
           <div class="home-utility"><button class="home-link" id="btn-records">RECORDS <span>↗</span></button><button class="home-link" id="btn-help">HOW TO PLAY <span>↗</span></button><button class="home-link" id="btn-settings">SETTINGS <span>↗</span></button></div>
         </div>
-        <div class="home-art" aria-hidden="true"><div class="home-art-label">FIVE FIGHTERS <span> / ONE RIFT</span></div><div class="home-art-number">05</div><img class="home-fighter home-fighter-back" src="assets/portraits/vesper_base.png?v=K24" alt=""><img class="home-fighter home-fighter-front" src="assets/portraits/valor_base.png?v=K24" alt=""><div class="home-art-caption">EVERY FIGHT<br><strong>STARTS HERE.</strong></div></div>
+        <div class="home-art" aria-hidden="true"><div class="home-art-label">FIVE FIGHTERS <span> / ONE RIFT</span></div><div class="home-art-number">05</div><img class="home-fighter home-fighter-back" src="assets/portraits/vesper_base.png?v=K28" alt=""><img class="home-fighter home-fighter-front" src="assets/portraits/valor_base.png?v=K28" alt=""><div class="home-art-caption">EVERY FIGHT<br><strong>STARTS HERE.</strong></div></div>
       </div>
       <div class="home-footer"><span>LOCAL BATTLE / 1–4 PLAYERS</span><span>KEYBOARD + GAMEPAD SUPPORTED</span></div>
     </div>
@@ -156,7 +156,7 @@
       <div class="hcard">
         <h3>THE GOAL</h3>
         <p>There are no health bars. Every hit raises your <b>damage %</b>. The higher your %, the further you fly. Knock opponents past the invisible blast zones around the stage to take a stock.</p>
-        <p>The higher your damage, the more knockback you take — a clean smash at 120% ends a stock.</p>
+        <p>The higher your damage, the more knockback you take. Wider side and upper blast zones give you more room to recover.</p>
       </div>
       <div class="hcard">
         <h3>PLAYER 1</h3>
@@ -169,7 +169,7 @@
           <div class="krow"><span>Special moves</span><span><kbd>G</kbd> + direction</span></div>
           <div class="krow"><span>Up special / recovery</span><span><kbd>W</kbd> + <kbd>G</kbd> or <kbd>Space</kbd> + <kbd>G</kbd></span></div>
           <div class="krow"><span>Shield / air dodge</span><span><kbd>C</kbd></span></div>
-          <div class="krow"><span>Grab / throw</span><span><kbd>V</kbd></span></div>
+          <div class="krow"><span>Grab / use item</span><span><kbd>V</kbd></span></div>
         </div>
       </div>
       <div class="hcard">
@@ -181,7 +181,7 @@
           <div class="krow"><span>Up special / recovery</span><span><kbd>↑</kbd> + <kbd>Num 2</kbd> or <kbd>Num 3</kbd> + <kbd>Num 2</kbd></span></div>
           <div class="krow"><span>Jump</span><span><kbd>Num 3</kbd></span></div>
           <div class="krow"><span>Shield</span><span><kbd>Num 0</kbd></span></div>
-          <div class="krow"><span>Grab</span><span><kbd>Num 4</kbd></span></div>
+          <div class="krow"><span>Grab / use item</span><span><kbd>Num 4</kbd></span></div>
         </div>
         <p style="margin-top:12px">Gamepads are supported for both players automatically.</p>
       </div>
@@ -189,6 +189,11 @@
         <h3>SMASH ATTACKS</h3>
         <p><b>Tap</b> a direction and press attack at the same time for a chargeable smash attack. Hold the attack button to charge for extra damage.</p>
         <p><b>Tilt</b> gently (hold a direction) and press attack for a quick tilt. In the air, direction + attack gives you neutrals, forwards, backs, ups and <b>spikes</b> (down-air).</p>
+      </div>
+      <div class="hcard">
+        <h3>FIGHTER SPECIALS</h3>
+        <p>Press <b>G</b> for a fighter's signature move, or hold left / right and press <b>G</b> for their side special. Running + <b>F</b> uses their dash attack. Up + G or jump + G remains your recovery; down + G uses a defensive move.</p>
+        <p><b>Valor</b> chains crescent cuts, launches with Skyslash Rush, and follows up a connecting Skyward Ascent with extra strikes. <b>Grim</b> strikes a wider area around him and charges like a boulder. <b>Astra</b> calls falling stars and leaves a comet trail. <b>Vesper</b> chains rapid blades and blinks through foes. <b>Rook</b> strings together punches and rises into a launching strike.</p>
       </div>
       <div class="hcard">
         <h3>DEFENSE</h3>
@@ -202,7 +207,7 @@
       </div>
       <div class="hcard">
         <h3>ITEMS & FINAL SMASH</h3>
-        <p>Items fall onto the stage — weapons, throwables, healing, growth mushrooms, stars, traps and summon sigils. Walk into one to pick it up; press attack to swing it or press shield to throw it.</p>
+        <p>Items fall onto the stage — weapons, throwables, healing, growth mushrooms, stars, traps and summon sigils. Walk into one to pick it up. Press <b>Grab / Use Item</b> (V for P1) to fire a ranged item, throw a bomb, shell or bumper, or drop a melee weapon. Melee weapons enhance your normal <b>Attack</b> moves (F for P1): the beam sword extends reach, the bat adds launch power, the star rod fires stars, and the hammer hits harder. Healing, status items and summons activate on contact; containers break open on contact.</p>
         <p>Smash the glowing <b>Smash Ball</b> until it shatters, then press <b>Special</b> to unleash your Final Smash.</p>
       </div>
     </div>
@@ -241,15 +246,15 @@
   </div>
 </div>
 
-<script src="js/core.js?v=K24"></script>
-<script src="js/data.js?v=K24"></script>
-<script src="js/render.js?v=K24"></script>
-<script src="js/fighter.js?v=K24"></script>
-<script src="js/items.js?v=K24"></script>
-<script src="js/ai.js?v=K24"></script>
-<script src="js/match.js?v=K24"></script>
-<script src="js/modes.js?v=K24"></script>
-<script src="js/cloud.js?v=K24"></script>
-<script src="js/ui.js?v=K24"></script>
+<script src="js/core.js?v=K28"></script>
+<script src="js/data.js?v=K28"></script>
+<script src="js/render.js?v=K28"></script>
+<script src="js/fighter.js?v=K28"></script>
+<script src="js/items.js?v=K28"></script>
+<script src="js/ai.js?v=K28"></script>
+<script src="js/match.js?v=K28"></script>
+<script src="js/modes.js?v=K28"></script>
+<script src="js/cloud.js?v=K28"></script>
+<script src="js/ui.js?v=K28"></script>
 </body>
 </html>

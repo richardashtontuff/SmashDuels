@@ -53,7 +53,7 @@ grab, or respawn. Explicit down + special still selects the down special.
 **Combat (§4)**
 - Jab, three tilts, three smash attacks (chargeable), dash attack
 - Five aerials per fighter including down-air spikes
-- Four specials per fighter: projectile, dash, recovery, counter/trap
+- Four character-specific specials per fighter: neutral, side, recovery and down
 - Grabs, pummelling and four directional throws — grabs beat shields; a hold that is never
   thrown releases on its own after `GRAB_HOLD_MAX` = 120 ticks, so nobody is pinned by a grab
 - One move lands at most its authored hits (`1 + multi`) on the same target per action
@@ -67,8 +67,7 @@ grab, or respawn. Explicit down + special still selects the down special.
 **Items (§8)** — 22 items: battering (beam sword, home-run bat, star rod), throwing (bob-omb,
 shell, bumper), shooting (ray gun, fire flower), healing (heart, tomato, food), status
 (star, mushrooms, metal box, bunny hood), containers (crate, capsule), summons, Smash Ball,
-Hammer. Item frequency and individual toggles. A swing or shot of a held item costs
-`ITEM_SWING` = 24 ticks, for the CPU's own item path as well as the player's button.
+Hammer. Item frequency and individual toggles. Walk into items to pick them up; a floating item name and colored ring mark each pickup. Grab / Use Item (V for P1) fires ranged items, throws bombs, shells and bumpers, or drops melee weapons; without an item it grabs as usual. Attack (F) keeps the fighter's normal moves and adds a weapon perk: beam sword reach, bat launch power, star rod projectiles, or hammer power. Specials are unchanged. Healing, status items and summons activate on contact; containers break on contact. Ranged shots have a 24-tick cooldown and limited ammo.
 
 Each one draws a generated sprite from `assets/items/` (built by `tools/slice_items.py` out of
 `assets-src/items/*.png`), placed by what an item *is* rather than by its collision box: a
@@ -84,7 +83,7 @@ aura; press special for a screen-clearing super.
 pass-through platforms, moving platforms (a fighter — and an item — standing on a mover rides
 its `p.dx/p.dy` for the tick), and hazards (lava pools, timed
 pillar) that re-arm on a 45-tick `HAZARD_REHIT` rather than billing you every frame of contact.
-The XL decks have expanded horizontal blast zones for recovery, and the camera can zoom out to fit them.
+Side and upper blast zones give fighters more recovery room on every stage; XL decks retain additional space beyond their wider edges. The camera can zoom out to follow offstage fighters.
 Ten of the standard decks are the Super Smash Bros. Ultimate *templates* copied as geometry: the Battlefield
 form (flat deck, two soft platforms to the sides, one high in the middle, one low over the
 centre), its Big and Small sizes, the Final Destination / Ω form (the same deck with the soft
@@ -110,11 +109,13 @@ chiptune and SFX via WebAudio.
 
 | Fighter | Archetype | Signature specials |
 |---|---|---|
-| **Valor** the Rift Blade | All-rounder | Lunar Slash · Rush Strike · Skyward Ascent · Guardian Stance |
-| **Grim** the Colossus | Heavyweight | Magma Fist · Rush Strike · Titan Rise · Guardian Stance |
-| **Astra** the Starweaver | Floaty zoner | Shooting Star Bolt · Comet Rush · Star Blink · Gravity Orb |
-| **Vesper** the Shade | Rushdown | Kunai Barrage · Shadowstep Dash · Viper Ascendant · Smoke Counter |
-| **Rook** the Rift Brawler | Projectile zoner | Hex Bullet Volley · Rune Lasso · Drone Grapple · Rune Mine |
+| **Valor** the Rift Blade | All-rounder | Crescent Combo · Skyslash Rush · Skyward Ascent · Guardian Stance |
+| **Grim** the Colossus | Heavyweight | Faultline Smash · Boulder Crash · Titan Rise · Guardian Stance |
+| **Astra** the Starweaver | Floaty zoner | Starfall Trio · Comet Rush · Star Blink · Gravity Orb |
+| **Vesper** the Shade | Rushdown | Viper Flurry · Shadowstep Dash · Viper Ascendant · Smoke Counter |
+| **Rook** the Rift Brawler | Combo brawler | Rift Fist Combo · Rift Rising · Drone Grapple · Rune Mine |
+
+Neutral special is G; hold left or right + G for a side special, up + G (or jump + G) for recovery, and down + G for the down special. Running + F uses the fighter's dash attack. Valor chains blade cuts and Skyward Ascent follows up on opponents hit during its opening rise; Grim's rune strike is a wide quake that reaches in front of and behind him; Astra calls falling stars and can leave a comet on her dash attack; Vesper's flurry finishes with a launcher; Rook chains punches and can rise into a launching side special. All fighters' F attacks have extended reach, including tilts, smash attacks, aerials and dash attacks. The existing fighter sprites and attack animations are reused for these moves.
 
 ### Which build the browser is running
 
