@@ -10,7 +10,7 @@ class FXSystem {
     if (this.parts.length > 420) this.parts.shift();
     this.parts.push(Object.assign({ x: 0, y: 0, vx: 0, vy: 0, life: 30, t: 0, size: 3, color: '#fff', grav: 0.2, drag: 0.97, shape: 'dot', rot: 0, vr: 0 }, o));
   }
-  text(x, y, str, color, size = 26, life = 50) { this.texts.push({ x, y, str, color, size, life, t: 0 }); }
+  text(x, y, str, color, size = 26, life = 50) { const t = { x, y, str, color, size, life, t: 0 }; this.texts.push(t); return t; }
   ring(x, y, color, r = 30, life = 18) { this.rings.push({ x, y, color, r0: r * 0.25, r1: r, t: 0, life }); }
   arc(x, y, ang, color, r = 40, life = 11, facing = 1) { this.arcs.push({ x, y, ang, color, r, t: 0, life, facing }); }
 
@@ -211,16 +211,21 @@ class Item {
      overhead swing, which is what made held items look pasted on. */
   heldAngle(f) {
     const a = f.action;
-    if (a && a.kind === 'attack' && a.total > 0) {
-      const p = Math.max(0, Math.min(1, a.t / a.total));
+    if (a && a.type === 'move' && a.dur > 0) {
+      const p = Math.max(0, Math.min(1, f.actionT / a.dur));
       return (Math.sin(p * Math.PI * 1.0) * 1.25 - 0.42) * f.facing;
     }
     return -0.28 * f.facing;
   }
   update(match) {
     if (this.spawnT > 0) this.spawnT--;
+    if (this.cooldown > 0) this.cooldown--;
     if (this.heldBy) {
       const f = this.heldBy;
+      if (this.type === 'hammer') {
+        if (this.heldTime === undefined) this.heldTime = this.def.dur;
+        if (--this.heldTime <= 0) { f.held = null; this.heldBy = null; this.dead = true; return; }
+      }
       const hp = this.handPoint(f);
       this.x = hp.x;
       this.y = hp.y;
@@ -481,8 +486,19 @@ class Projectile {
   get box() { const s = this.size; return { x: this.x - s, y: this.y - s, w: s * 2, h: s * 2 }; }
   update(match) {
     this.t++;
-    if (!this.static) { this.x += this.vx; this.y += this.vy; }
+    const oldY = this.y;
+    if (!this.static) { this.x += this.vx; this.y += this.vy; this.vy += this.grav || 0; }
     this.rot += 0.3;
+    if ((this.kind === 'bomb' || this.kind === 'thrown' || this.kind === 'fallingStar') && this.vy > 0) {
+      const gd = match.stage.ground;
+      const surfaces = [gd, ...match.stage.platforms];
+      for (const p of surfaces) {
+        const x = p.cx !== undefined ? p.cx : p.x, y = p.cy !== undefined ? p.cy : p.y;
+        if (this.x >= x && this.x <= x + p.w && oldY + this.size <= y && this.y + this.size >= y) {
+          this.y = y - this.size; this.dead = true; break;
+        }
+      }
+    }
     if (this.pull) {
       // gravity orb: pull nearby fighters
       for (const f of match.fighters) {
@@ -496,8 +512,16 @@ class Projectile {
     }
     if (this.life-- <= 0) this.dead = true;
     if (this.x < match.blast.left - 200 || this.x > match.blast.right + 200 || this.y < match.blast.top - 100 || this.y > match.blast.bottom + 100) this.dead = true;
+    // A bomb explodes on contact rather than applying a direct hit AND an AoE.
+    if (this.kind === 'bomb' && !this.dead) {
+      for (const f of match.fighters) {
+        if (f === this.owner || f.eliminated || f.invincible || (this.owner && match.sameTeam(this.owner, f))) continue;
+        if (aabb(this.box, f.hurtbox)) { this.dead = true; break; }
+      }
+    }
     // hit fighters
     for (const f of match.fighters) {
+      if (this.dead || this.kind === 'bomb') break;
       if (f === this.owner || f.eliminated || this.hitIds.has(f.id)) continue;
       if (match.sameTeam(this.owner, f) && this.owner) continue;
       if (!aabb(this.box, f.hurtbox)) continue;
@@ -511,10 +535,31 @@ class Projectile {
       if (this.pierce && this.hitIds.size < this.pierce) continue;
       if (!this.pull) this.dead = true;
     }
-    if (this.dead && this.kind === 'bomb') match.fx.explode(this.x, this.y, 60, this.color);
+    if (this.dead && this.kind === 'bomb' && !this.exploded) {
+      this.exploded = true;
+      const r = this.radius || 120;
+      match.fx.explode(this.x, this.y, r, this.color);
+      // aoeHit measures fighter feet; offset to compare with fighter centers.
+      match.aoeHit(this.owner, this.x, this.y + 50, r, this.damage, this.bkb, this.kbs, this.angle);
+      AUDIO.sfx('bomb'); match.cam.shake(7);
+    }
   }
   draw(ctx, time) {
     ctx.save(); ctx.translate(this.x, this.y);
+    if (this.kind === 'fallingStar') {
+      ctx.rotate(this.rot * 0.45); ctx.fillStyle = this.color;
+      ctx.beginPath(); star(ctx, 0, 0, this.size * 1.4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); star(ctx, 0, 0, this.size * 0.55); ctx.closePath(); ctx.fill();
+      ctx.restore(); return;
+    }
+    if (this.thrownItem) {
+      const it = this.thrownItem;
+      const art = typeof Sprites !== 'undefined' && Sprites.itemArt ? Sprites.itemArt(it.type) : null;
+      ctx.rotate(this.rot);
+      if (art) ctx.drawImage(art.img, -art.w / 2, -art.h / 2, art.w, art.h);
+      else drawItemIcon(ctx, it.type, it.def, 1);
+      ctx.restore(); return;
+    }
     ctx.globalCompositeOperation = 'lighter';
     const g = ctx.createRadialGradient(0, 0, 1, 0, 0, this.size * 1.9);
     g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, this.color); g.addColorStop(1, 'rgba(0,0,0,0)');

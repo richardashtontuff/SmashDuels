@@ -40,7 +40,10 @@ class Camera {
     this.tx = cx; this.ty = cy;
     let z = Math.min(this.W / w, this.H / h);
     // Large decks need room to zoom out on narrow viewports.
-    const minZoom = gd ? Math.min(0.42, this.W / (gd.w + 400)) : 0.42;
+    // Fighters can now recover farther from the deck and above the stage.
+    // Permit the camera to zoom out enough to keep that space visible.
+    const fitZoom = Math.max(0.1, Math.min(this.W / w, this.H / h));
+    const minZoom = gd ? Math.min(0.42, this.W / (gd.w + 400), fitZoom) : Math.min(0.42, fitZoom);
     z = clamp(z, minZoom, 1.06);
     /* A camera that re-derives its scale every tick breathes: one fighter sprinting
        5px a tick widens the frame, the whole scene rescales by ~1%, and the stage
@@ -82,12 +85,12 @@ class Match {
     this.rules = opts.rules;
     this.stageDef = STAGES[opts.stageKey] || STAGES.skyshrine;
     this.stage = JSON.parse(JSON.stringify(this.stageDef));
-    // Keep the usual blast zones on standard stages; XL decks need the same
+    // Keep the expanded blast zones on standard stages; XL decks need the same
     // offstage recovery space beyond their wider edges.
     const ground = this.stage.ground;
     this.blast = Object.assign({}, WORLD.blast, {
-      left: this.stage.size === 'XL' ? Math.min(WORLD.blast.left, ground.x - 650) : WORLD.blast.left,
-      right: this.stage.size === 'XL' ? Math.max(WORLD.blast.right, ground.x + ground.w + 650) : WORLD.blast.right,
+      left: this.stage.size === 'XL' ? Math.min(WORLD.blast.left, ground.x - 950) : WORLD.blast.left,
+      right: this.stage.size === 'XL' ? Math.max(WORLD.blast.right, ground.x + ground.w + 950) : WORLD.blast.right,
     });
     // materialize moving platforms
     this.stage.platforms.forEach((p, i) => {
@@ -404,26 +407,27 @@ class Match {
 
   updateItems() {
     const mode = this.rules.items;
-    if (mode === 'none') return;
-    const rate = mode === 'low' ? 520 : mode === 'medium' ? 320 : 170;
-    this.itemTimer--;
-    if (this.itemTimer <= 0) {
-      this.itemTimer = rate + randInt(-40, 60);
-      this.spawnRandomItem();
-    }
-    // smash ball
-    if (!this.smashBallActive && this.rules.mode !== 'stamina' && this.frame > 400 && chance(0.004)) {
-      this.smashBallActive = true;
-      const gd = this.stage.ground;
-      const it = new Item('smashball', gd.x + gd.w * rand(0.2, 0.8), -300, this);
-      it.smashBall = true;
-      this.items.push(it);
-      AUDIO.sfx('smashBall');
-      this.announce('SMASH BALL!', '#ffe04a', 60);
+    if (mode !== 'none') {
+      const rate = mode === 'low' ? 520 : mode === 'medium' ? 320 : 170;
+      this.itemTimer--;
+      if (this.itemTimer <= 0) {
+        this.itemTimer = rate + randInt(-40, 60);
+        this.spawnRandomItem();
+      }
+      // smash ball
+      if (!this.smashBallActive && this.rules.mode !== 'stamina' && this.frame > 400 && chance(0.004)) {
+        this.smashBallActive = true;
+        const gd = this.stage.ground;
+        const it = new Item('smashball', gd.x + gd.w * rand(0.2, 0.8), -300, this);
+        it.smashBall = true;
+        this.items.push(it);
+        AUDIO.sfx('smashBall');
+        this.announce('SMASH BALL!', '#ffe04a', 60);
+      }
     }
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
-      it.update(this);
+      if (!it.dead) it.update(this);
       if (it.dead) { this.items.splice(i, 1); if (it.smashBall) this.smashBallActive = false; }
     }
   }
@@ -714,7 +718,7 @@ class Match {
   itemsHitByAttack(f, box, dmg) {
     this.hitTargets(box, f, dmg);
     for (const it of this.items) {
-      if (it.heldBy) continue;
+      if (it.dead || it.heldBy) continue;
       if (aabb(box, it.box)) {
         it.hp = (it.hp || 0) - dmg;
         this.fx.burst(it.x, it.y, it.def.color, 6);
@@ -753,44 +757,56 @@ class Match {
     AUDIO.sfx('pickup');
   }
 
+  /* Small, local feedback rather than a banner over the fight. Replace an
+     older pickup label for this fighter so a pile of food cannot flood the screen. */
+  pickupNotice(f, it) {
+    if (f.pickupLabel) {
+      const i = this.fx.texts.indexOf(f.pickupLabel);
+      if (i >= 0) this.fx.texts.splice(i, 1);
+    }
+    f.pickupLabel = this.fx.text(f.x, f.y - 145 * f.scale, 'PICKUP: ' + it.def.name, it.def.color, 16, 40);
+    this.fx.ring(it.x, it.y, it.def.color, 34, 12);
+  }
+
   /* item pickup / use */
   tryPickup(f) {
+    if (f.held || f.eliminated || f.hitstun > 0) return false;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
-      if (it.heldBy || it.spawnT > 0) continue;
-      if (it.smashBall) continue;
+      if (it.dead || it.heldBy || it.spawnT > 0 || it.cooldown > 0) continue;
+      if (it.smashBall || it.type === 'smashball') continue;
       if (dist({ x: f.x, y: f.y - 40 }, { x: it.x, y: it.y }) < 40 * f.scale) {
         if (it.def.cat === 'heal') {
+          const healed = Math.min(f.damage, it.def.heal);
           f.damage = Math.max(0, f.damage - it.def.heal);
-          this.fx.text(f.x, f.y - 120, '-' + Math.min(it.def.heal, 99) + '%', '#78ff9a', 26);
+          this.fx.text(f.x, f.y - 110 * f.scale, '-' + Math.round(healed) + '%', '#78ff9a', 20, 40);
           this.fx.burst(it.x, it.y, it.def.color, 14);
           it.dead = true; AUDIO.sfx('heal');
           this.triggerChallenge('heal', f);
-          return true;
+          this.pickupNotice(f, it); return true;
         }
         if (it.def.cat === 'status') {
           this.applyStatus(f, it.type);
           it.dead = true; AUDIO.sfx('pickup');
-          return true;
+          this.pickupNotice(f, it); return true;
         }
         if (it.def.cat === 'summon') {
           this.spawnSummon(f, it.def.summon);
           it.dead = true; AUDIO.sfx('pickup');
-          this.announce('SUMMON!', it.def.color, 40);
-          return true;
+          this.pickupNotice(f, it); return true;
         }
         if (it.def.cat === 'container') {
           this.breakContainer(it, f);
-          return true;
+          this.pickupNotice(f, it); return true;
         }
         if (it.def.cat === 'special' && it.type === 'hammer') {
           f.held = it; it.heldBy = f; AUDIO.sfx('pickup');
-          return true;
+          this.pickupNotice(f, it); return true;
         }
         // equippable
         f.held = it; it.heldBy = f;
         AUDIO.sfx('pickup');
-        return true;
+        this.pickupNotice(f, it); return true;
       }
     }
     return false;
@@ -804,37 +820,26 @@ class Match {
     if (type === 'metalbox') { f.buffs.metal = d.dur; }
     if (type === 'bunnyhood') { f.buffs.bunny = d.dur; }
     this.fx.burst(f.x, f.y - 50, d.color, 20);
-    this.fx.text(f.x, f.y - 130, d.name, d.color, 18);
   }
 
   useHeld(f) {
     const it = f.held;
     if (!it) return false;
-    /* One swing per ITEM_SWING ticks, whoever asked for it.  The player pays that
-       cost because Fighter's attack press puts them in a 24-tick item action; the
-       CPU goes straight through here, and until now nothing said no — an AI holding
-       a beamsword re-hit every frame it kept the button down, 11% a tick, 999% in
-       two seconds, and the refreshed hitlag froze both fighters for the rest of the
-       round (519 hits inside one 900-frame lock on Rune Range). */
+    // Both players and CPUs share this cooldown for ranged shots.
     if (f.itemCd > 0 || f.hitstun > 0 || f.eliminated) return false;
     const d = it.def;
-    f.itemCd = ITEM_SWING;
     if (d.cat === 'shoot') {
       if (it.ammo === undefined) it.ammo = d.ammo;
-      if (it.ammo <= 0) { f.held = null; it.dead = true; return false; }
+      if (it.ammo <= 0) { f.held = null; it.heldBy = null; it.dead = true; return false; }
+      f.itemCd = ITEM_SWING;
       it.ammo--;
       this.spawnProjectile({
         owner: f, x: f.x + f.facing * 26, y: f.y - 56, vx: f.facing * 13, vy: 0,
         damage: d.dmg, bkb: d.bkb, kbs: d.kbs, angle: 30, life: 34, color: d.color, size: d.flame ? 7 : 6, kind: 'bullet',
       });
-      if (it.ammo % 2 === 0) AUDIO.sfx('shoot');
-      return true;
-    }
-    if (d.cat === 'batter') {
-      this.aoeHit(f, f.x + f.facing * 40, f.y - 56, 60, d.dmg, d.bkb, d.kbs, 40);
-      AUDIO.sfx('bat');
-      this.cam.shake(4);
-      this.fx.swoosh(f, 56);
+      AUDIO.sfx('shoot');
+      this.fx.muzzle(f.x + f.facing * 26, f.y - 56, d.color, f.facing);
+      if (it.ammo === 0) { f.held = null; it.heldBy = null; it.dead = true; }
       return true;
     }
     return false;
@@ -842,24 +847,26 @@ class Match {
 
   throwHeld(f) {
     const it = f.held;
-    if (!it) return;
+    if (!it) return false;
     f.held = null; it.heldBy = null;
     it.x = f.x + f.facing * 30; it.y = f.y - 60;
     it.vx = f.facing * 11; it.vy = -3;
-    it.onGround = false;
+    it.onGround = false; it.onPlatform = null;
     // convert to hazard projectile
     if (it.def.cat === 'throw' || it.type === 'bobomb' || it.type === 'shell') {
       const p = new Projectile({
         owner: f, x: it.x, y: it.y, vx: it.vx, vy: it.vy, damage: it.def.dmg, bkb: it.def.bkb, kbs: it.def.kbs, angle: 40,
-        life: 120, color: it.def.color, size: 14, kind: it.type === 'bobomb' ? 'bomb' : 'thrown', grav: 1,
+        life: 120, color: it.def.color, size: 14, kind: it.type === 'bobomb' ? 'bomb' : 'thrown', grav: 0.25, radius: it.def.radius,
       });
       p.thrownItem = it; it.dead = true;
       this.projectiles.push(p);
       AUDIO.sfx('throw');
-      return;
+      return true;
     }
-    this.items.push(it);
+    // Held items already live in this.items; adding them again duplicates them.
+    it.cooldown = 30;
     AUDIO.sfx('throw');
+    return true;
   }
 
   /* ---------------- KO ---------------- */

@@ -756,6 +756,8 @@ test('facing: air turn still works (the fix is not a freeze)', () => {
 test('states: jump / land / crouch / fall are all reachable and settle', () => {
   const { ctx } = run();
   const m = newMatch(ctx, cast(1, ['rook']), 'hollow');
+  // This tests the state machine, not random item pickups or pillar interruptions.
+  m.rules.items = 'none'; m.stage.hazard = null;
   const f = m.fighters[0];
   m.readPlayerInput = (fr) => fr.__raw || {};
   const gd = m.stage.ground;
@@ -977,24 +979,6 @@ function vs4Match(stage) {
 }
 
 /* The three regressions that test was hunting, pinned individually. */
-test('vs4: a swing of a held item is one hit, not one hit per frame', () => {
-  const { ctx, g } = run();
-  const m = newMatch(ctx, cast(2, ['valor', 'grim']), 'skyshrine', { state: 'play' });
-  const a = m.fighters[0], b = m.fighters[1];
-  a.held = { def: g.ITEMS.beamsword, x: a.x, y: a.y, heldBy: a, ammo: 9 };
-  a.state = 'idle'; b.state = 'idle'; b.damage = 0; b.x = a.x + 30; b.vx = 0;
-  a.facing = 1;
-  let hits = 0;
-  const orig = m.hitFighter.bind(m);
-  m.hitFighter = (atk, tgt, o) => { hits++; return orig(atk, tgt, o); };
-  /* The CPU path calls Match.useHeld directly (ai.js useItemOrThrow); a player pays
-     24 frames of item action instead.  Before the cooldown existed, a CPU holding a
-     batter hit 60 times in 60 ticks for 660%. */
-  for (let i = 0; i < 60; i++) { m.useHeld(a); m.update(); }
-  assert(hits === 1, `${hits} hits from 60 frames of swinging — expected 1`);
-  assert(b.damage <= 12, `victim ended at ${b.damage}% from one swing`);
-});
-
 test('vs4: a multi-hit move lands its authored hits on one target, no more', () => {
   const { ctx } = run();
   const m = newMatch(ctx, cast(2, ['vesper', 'grim']), 'skyshrine', { state: 'play' });
@@ -1175,7 +1159,8 @@ test('up special: each recovery can damage a nearby opponent once', () => {
       enemy.vx = enemy.vy = 0; enemy.onGround = false; enemy.state = 'fall'; enemy.hitstun = 0; enemy.invincT = 0;
       c.tick(1);
     }
-    assert(Math.abs(enemy.damage - sp.damage) < .01, `${key}: recovery dealt ${enemy.damage}%, expected ${sp.damage}%`);
+    const openingDamage = sp.ascentCombo ? sp.ascentCombo.opening : sp.damage;
+    assert(Math.abs(enemy.damage - openingDamage) < .01, `${key}: recovery dealt ${enemy.damage}%, expected ${openingDamage}%`);
   }
 });
 
@@ -1458,6 +1443,407 @@ test('XL stages: wider decks keep recoverable blast zones and projectiles', () =
   const regular = newMatch(ctx, cast(1, ['valor']), 'terminal');
   assert(regular.blast.left === g.WORLD.blast.left && regular.blast.right === g.WORLD.blast.right,
     'standard stage blast zones changed');
+});
+
+
+/* Real input and item lifecycle coverage, for every item category. */
+function itemFixture(keys = ['valor', 'grim']) {
+  const {ctx, g} = run();
+  const m = newMatch(ctx, cast(keys.length, keys), 'skyshrine', {rules: {items: 'none'}});
+  const a = m.fighters[0], b = m.fighters[1];
+  for (const [i, f] of m.fighters.entries()) {
+    f.x = i * 300; f.y = m.stage.ground.y; f.vx = f.vy = 0;
+    f.onGround = true; f.state = 'idle'; f.spawnProtect = 0; f.invincT = 0;
+  }
+  a.facing = 1;
+  let input = {};
+  const ctl = control(m, (f, i) => i === 0 ? input : {});
+  return {m, a, b, g, ctl, set: v => { input = v; }};
+}
+function itemAt(m, f, type) {
+  const it = m.spawnItem(type, f.x, f.y - 8);
+  it.spawnT = 0; it.onGround = true; it.vx = it.vy = 0;
+  return it;
+}
+
+test('items: V uses all ranged and throwable items from actual input', () => {
+  for (const key of ['bobomb', 'shell', 'bumper', 'raygun', 'fireflower']) {
+    const {m, a, ctl, set} = itemFixture();
+    const it = itemAt(m, a, key);
+    ctl.tick(1); assert(a.held === it, `${key}: automatic pickup failed`);
+    set({grab:true}); ctl.tick(1);
+    assert(a.state === 'attack' && a.action.type === 'item', `${key}: V started a grab instead of using the item`);
+    assert(m.projectiles.length === 1, `${key}: no projectile created`);
+    if (it.def.cat === 'throw') assert(!a.held && it.dead && !it.heldBy, `${key}: not released`);
+    else assert(a.held === it && it.ammo === it.def.ammo - 1, `${key}: shot did not consume ammo`);
+  }
+});
+
+test('items: fired and thrown projectiles hit opponents', () => {
+  for (const key of ['shell','bumper','raygun','fireflower']) {
+    const {m,a,b,ctl,set} = itemFixture();
+    itemAt(m,a,key); ctl.tick(1); b.x = a.x + 145; b.y = a.y; b.spawnProtect = b.invincT = 0;
+    set({grab:true}); ctl.tick(1); set({}); ctl.tick(25);
+    assert(b.damage > 0, `${key}: projectile did not hit opponent`);
+  }
+});
+
+test('items: held items can be used in the air and while shielding', () => {
+  for (const air of [true, false]) {
+    const {m,a,ctl,set} = itemFixture(); itemAt(m,a,'bobomb'); ctl.tick(1);
+    if (air) { a.y -= 120; a.onGround = false; a.state = 'fall'; }
+    else { set({shield:true}); ctl.tick(1); assert(a.shieldHP > 0, 'held item disabled shield'); }
+    set({grab:true, shield:!air}); ctl.tick(1);
+    assert(!a.held && m.projectiles.length === 1 && a.shieldHP === 0, `item did not activate ${air ? 'in air' : 'out of shield'}`);
+  }
+});
+
+test('items: CPU item decisions do not bypass hitstun or fighter action states', () => {
+  const {m,a,b,g,ctl} = itemFixture();
+  const gun = itemAt(m,a,'raygun'); ctl.tick(1); b.x = a.x + 100;
+  const cpu = new g.CPU(a,m); cpu.target = b; cpu.plan = 'attack'; cpu.timer = 9999;
+  a.hitstun = 90; a.state = 'hitstun';
+  for (let i = 0; i < 100; i++) cpu.think(m);
+  assert(a.held === gun && gun.ammo === undefined && m.projectiles.length === 0, 'CPU fired directly through hitstun');
+});
+
+test('items: hammer expires without leaving an orphaned item', () => {
+  const {m,a,ctl} = itemFixture(); const hammer = itemAt(m,a,'hammer'); ctl.tick(1);
+  hammer.heldTime = 2; ctl.tick(3);
+  assert(!a.held && !hammer.heldBy && hammer.dead && !m.items.includes(hammer), 'hammer did not expire cleanly');
+});
+
+test('items: a shot buffered during recovery fires as soon as the cooldown ends', () => {
+  const {m,a,ctl,set} = itemFixture(); const gun = itemAt(m,a,'raygun'); ctl.tick(1);
+  set({grab:true}); ctl.tick(1); set({}); ctl.tick(18);
+  set({grab:true}); ctl.tick(1); set({}); ctl.tick(8);
+  assert(gun.ammo === gun.def.ammo - 2, `buffered shot was lost (ammo ${gun.ammo})`);
+});
+
+test('items: simultaneous pickup and V does not waste the item or start a grab', () => {
+  const {m, a, ctl, set} = itemFixture();
+  const it = itemAt(m, a, 'bobomb');
+  set({grab:true}); ctl.tick(1);
+  assert(a.held === it && m.projectiles.length === 0 && a.state !== 'grab', 'pickup input also consumed or grabbed');
+  set({}); ctl.tick(1); set({grab:true}); ctl.tick(1);
+  assert(!a.held && m.projectiles.length === 1, 'fresh V did not throw');
+});
+
+test('items: bomb detonates once on contact or ground and respects teams and shields', () => {
+  for (const ground of [false, true]) {
+    const {m, a, b, ctl, set} = itemFixture();
+    const it = itemAt(m, a, 'bobomb'); ctl.tick(1);
+    b.x = ground ? 160 : 100; b.y = a.y; b.spawnProtect = b.invincT = 0;
+    if (ground) b.shieldHP = 60;
+    set({grab:true}); ctl.tick(1); set({});
+    let explosions = 0; const original = m.fx.explode.bind(m.fx);
+    m.fx.explode = (...args) => { explosions++; return original(...args); };
+    ctl.tick(30);
+    assert(explosions === 1, `bomb ${ground ? 'ground' : 'contact'} exploded ${explosions} times`);
+    assert(!m.projectiles.length && (ground ? b.shieldHP < 60 : b.damage > 0), 'bomb did not damage or pressure shield');
+  }
+  const {m, a, b, ctl, set} = itemFixture();
+  m.rules.teams = true; a.team = b.team = 1; b.x = 105; b.y = a.y;
+  itemAt(m, a, 'bobomb'); ctl.tick(1); set({grab:true}); ctl.tick(1); set({}); ctl.tick(30);
+  assert(b.damage === 0 && a.damage === 0, 'bomb damaged owner or teammate');
+});
+
+test('items: F applies each melee perk to normal moves, while G remains special', () => {
+  for (const key of ['beamsword', 'homerunbat', 'starrod', 'hammer']) {
+    const {m, a, ctl, set} = itemFixture();
+    const it = itemAt(m, a, key); ctl.tick(1);
+    assert(a.held === it, `${key}: not picked up`);
+    set({attack:true}); ctl.tick(1);
+    const act = a.action, base = a.def.moves[act.key];
+    assert(act.type === 'move' && act.key === 'jab' && act.itemPerk === it.def.perk, `${key}: F did not keep the regular move`);
+    assert(act.damage > base.damage, `${key}: no damage perk`);
+    if (key === 'beamsword') assert(act.hitboxes[0].w > base.hitboxes[0].w, 'sword did not extend reach');
+    if (key === 'homerunbat') assert(act.kbs > base.kbs && act.bkb > base.bkb, 'bat did not boost launch');
+    set({}); ctl.tick(act.startup + 2);
+    if (key === 'starrod') assert(m.projectiles.some(p => p.kind === 'star'), 'rod fired no star');
+    ctl.tick(70); set({special:true}); ctl.tick(1);
+    assert(a.action && a.action.type === 'special', `${key}: G no longer starts special`);
+  }
+});
+
+test('items: melee strikes use normal hit windows and cannot hit every frame', () => {
+  for (const key of ['beamsword','homerunbat','starrod','hammer']) {
+    const {m,a,b,ctl,set} = itemFixture();
+    itemAt(m,a,key); ctl.tick(1); b.x = a.x + 48; b.y = a.y;
+    let hits = 0; const orig = m.hitFighter.bind(m);
+    m.hitFighter = (atk,tgt,o) => { if (atk === a && tgt === b) hits++; return orig(atk,tgt,o); };
+    set({attack:true}); ctl.tick(1); set({}); ctl.tick(45);
+    assert(hits === 1 && b.damage > 0, `${key}: ${hits} hits from one jab`);
+  }
+});
+
+test('items: dropping, cooldown, ammo exhaustion, KO and disabled spawning preserve ownership', () => {
+  const {m,a,ctl,set} = itemFixture();
+  const it = itemAt(m,a,'beamsword'); ctl.tick(1);
+  set({grab:true}); ctl.tick(1); set({});
+  assert(!a.held && !it.heldBy && m.items.filter(x => x === it).length === 1, 'drop duplicated or retained item');
+  a.x = it.x; it.y = a.y - 8; it.vx = it.vy = 0; it.onGround = true;
+  ctl.tick(2); assert(!a.held, 'immediately re-picked the dropped weapon');
+  ctl.tick(50); assert(a.held === it, 'dropped weapon never became pickable');
+  a.die(m,null); assert(!a.held && !it.heldBy && it.dead, 'KO orphaned held weapon');
+  ctl.tick(1); assert(!m.items.includes(it), 'dead item was not removed when spawning disabled');
+  const x = itemFixture(); const gun = itemAt(x.m,x.a,'raygun'); gun.ammo = 1; x.ctl.tick(1);
+  x.set({grab:true}); x.ctl.tick(1);
+  assert(!x.a.held && !gun.heldBy && gun.dead && x.m.projectiles.length === 1, 'last shot did not release the empty gun');
+});
+
+test('items: pickups activate every instant category, containers and smash ball', () => {
+  for (const key of ['heart','tomato','food','star','mushroom','poison','metalbox','bunnyhood','crate','capsule','riftorb','assist']) {
+    const {m,a,ctl} = itemFixture(); a.damage = 80;
+    const it = itemAt(m,a,key); ctl.tick(1);
+    assert(it.dead && !a.held, `${key}: not activated on contact`);
+    if (it.def.cat === 'heal') assert(a.damage < 80, `${key}: did not heal`);
+    if (it.def.cat === 'status') assert(Object.values(a.buffs).some(v => v > 0), `${key}: no status`);
+    if (it.def.cat === 'summon') assert(m.summons.length === 1, `${key}: no summon`);
+    if (it.def.cat === 'container') assert(m.items.length > 1, `${key}: no contents`);
+  }
+  const {m,a} = itemFixture(); const sb = itemAt(m,a,'smashball'); sb.smashBall = true; sb.hp = 1;
+  assert(!m.tryPickup(a), 'smash ball picked up instead of broken');
+  m.itemsHitByAttack(a,sb.box,10);
+  assert(sb.dead && a.hasSmashBall, 'smash ball did not award final smash');
+});
+
+
+/* Signature specials and combo attacks must work through real player input,
+   hit unpinned opponents, and still end rather than trapping a victim. */
+test('signature specials: all five neutral G moves are distinct, hit, and end', () => {
+  const expected = { valor: ['bladecombo', 2], grim: ['quake', 1], astra: ['starfall', 3], vesper: ['flurry', 3], rook: ['punchcombo', 3] };
+  for (const key of Object.keys(expected)) for (const facing of [-1, 1]) {
+    const {m,a,b,ctl,set} = itemFixture([key,'grim']);
+    a.facing = facing; b.x = facing * (key === 'astra' ? 120 : 50); b.y = a.y;
+    const hits = []; const spawn = []; const original = m.hitFighter.bind(m), fire = m.spawnProjectile.bind(m);
+    m.hitFighter = (atk,tgt,o) => { if (atk === a && tgt === b) hits.push(o); return original(atk,tgt,o); };
+    m.spawnProjectile = o => { spawn.push(o.kind); return fire(o); };
+    set({special:true}); ctl.tick(1);
+    assert(a.action && a.action.specialType === expected[key][0], `${key}: wrong neutral special`);
+    set({}); ctl.tick(100);
+    const validHits = key === 'astra' ? hits.length >= 1 && hits.length <= 3 : hits.length === expected[key][1];
+    assert(validHits, `${key} facing ${facing}: unexpected hit count ${hits.length}`);
+    assert(b.damage > 0 && a.state !== 'special', `${key}: no damage or action did not end`);
+    if (key === 'astra') assert(spawn.length === 3 && spawn.every(k => k === 'fallingStar'), 'Astra did not summon three stars');
+    else assert(spawn.length === 0, `${key}: melee special fired a projectile`);
+    if (hits.length > 1 && key !== 'astra') assert(hits.at(-1).bkb > hits[0].bkb, `${key}: final strike did not launch harder`);
+    assert(Math.cos(hits.at(-1).angle * Math.PI / 180) * facing > 0, `${key}: final strike launches backward facing ${facing}`);
+  }
+});
+
+test('signature specials: Rook side G follows input direction and rises into a launch', () => {
+  for (const dir of [-1,1]) {
+    const {m,a,b,ctl,set} = itemFixture(['rook','grim']);
+    a.facing = -dir; b.x = dir * 80; b.y = a.y;
+    const y = a.y; let lowest = y; let strike = null; const orig = m.hitFighter.bind(m);
+    m.hitFighter = (atk,tgt,o) => { if (atk === a && tgt === b) strike = o; return orig(atk,tgt,o); };
+    set({special:true,left:dir < 0,right:dir > 0}); ctl.tick(1);
+    assert(a.action && a.action.specialType === 'risingdash' && a.facing === dir, 'side G ignored input direction');
+    set({}); for(let i=0;i<65;i++) { ctl.tick(1); lowest = Math.min(lowest,a.y); }
+    assert(lowest < y - 20 && strike && strike.angle > 70 && b.damage > 0, `Rook did not rise and launch facing ${dir}`);
+    assert(a.state !== 'special', 'rising strike never ended');
+  }
+});
+
+test('signature specials: Astra down G creates a pulling orb that damages an enemy', () => {
+  const {m,a,b,ctl,set} = itemFixture(['astra','grim']);
+  b.x = 60; b.y = a.y; set({down:true,special:true}); ctl.tick(1); set({});
+  ctl.tick(a.def.specials.down.startup + 2);
+  const orb = m.projectiles.find(p => p.kind === 'orb');
+  assert(orb && orb.pull && orb.owner === a, 'Astra did not create her down-special orb');
+  ctl.tick(25); assert(b.damage > 0, 'gravity orb did not damage nearby enemy');
+});
+
+test('signature specials: combo hits respect shields, teams, invincibility and hit caps', () => {
+  for (const key of ['valor','grim','vesper','rook']) for (const defense of ['shield','team','invincible']) {
+    const {m,a,b,ctl,set} = itemFixture([key,'grim']);
+    b.x = 50; b.y = a.y; m.checkEnd = () => {};
+    if (defense === 'shield') { b.shieldHP = 60; b.state = 'shield'; b.__raw = {shield:true}; m.readPlayerInput = f => f === a ? (a.__raw || {}) : {shield:true}; }
+    if (defense === 'team') { m.rules.teams = true; a.team = b.team = 1; }
+    if (defense === 'invincible') b.invincT = 150;
+    const orig = m.hitFighter.bind(m); let hits = 0;
+    m.hitFighter = (atk,tgt,o) => { if (atk === a && tgt === b) hits++; return orig(atk,tgt,o); };
+    // control() normally provides inputs, so assign a real pressed edge directly.
+    set({special:true}); ctl.tick(1); set({}); ctl.tick(80);
+    if (defense === 'shield') assert(b.shieldHP < 60 && hits === 0, `${key}: shield bypassed`);
+    else assert(b.damage === 0 && hits === 0, `${key}: hit ${defense} target`);
+    assert(a.state !== 'special', `${key}: ${defense} caused a lock`);
+  }
+});
+
+test('signature combos: dash and jab variations retain hit windows and item perks', () => {
+  const {g} = run();
+  assert(g.FIGHTERS.valor.moves.dashattack.angle !== g.FIGHTERS.grim.moves.dashattack.angle, 'Valor and Grim dash attacks launch alike');
+  assert(g.FIGHTERS.vesper.moves.dashattack.multi > 0, 'Vesper dash has no combo');
+  assert(g.FIGHTERS.rook.moves.jab.multi > 0, 'Rook has no punch combo');
+  assert(g.FIGHTERS.astra.moves.dashattack.signature === 'comet', 'Astra has no comet dash');
+  const {m,a,ctl,set} = itemFixture(['astra','grim']); a.held = {type:'beamsword',def:g.ITEMS.beamsword,heldBy:a};
+  a.state='run'; a.vx=6; a.dashT=5;
+  set({attack:true}); ctl.tick(1); set({}); ctl.tick(12);
+  assert(m.projectiles.some(p => p.kind === 'fallingStar'), 'comet dash did not release its star');
+});
+
+test('signature combos: CPU drops through a platform to reach an opponent, even with an item', () => {
+  for (const held of [false,true]) {
+    const {m,a,b,g} = itemFixture(); const p = m.stage.platforms[0];
+    a.x = (p.cx !== undefined ? p.cx : p.x) + p.w / 2; a.y = p.cy !== undefined ? p.cy : p.y;
+    a.onGround = true; a.onPlatform = p; a.state = 'idle'; b.x = a.x; b.y = m.stage.ground.y;
+    if (held) a.held = { type:'beamsword', def:g.ITEMS.beamsword, heldBy:a };
+    const cpu = new g.CPU(a,m); cpu.level = 2; cpu.target = b; cpu.plan = 'approach'; cpu.timer = 200;
+    a.readInput(cpu.think(m)); a.update(m);
+    assert(!a.onGround && !a.onPlatform && a.dropThroughT > 0, `CPU stayed on platform with held=${held}`);
+  }
+});
+
+
+test('range: every fighter F move has wider hitboxes without changing their windows', () => {
+  const {ctx,g} = run();
+  const keys = ['jab','ftilt','utilt','dtilt','dashattack','fsmash','usmash','dsmash','nair','fair','bair','uair','dair'];
+  // Authored (pre-range-pass) widths; each move must retain all boxes and windows.
+  const widths = {
+    valor:[46,56,74,52,62,70,92,66,84,66,62,68,52],
+    grim:[52,66,84,64,74,82,108,88,104,78,74,84,62],
+    astra:[56,66,76,58,64,84,104,92,92,74,68,76,56],
+    vesper:[40,50,68,46,58,62,84,76,80,58,58,64,46],
+    rook:[54,62,74,56,66,92,96,88,92,76,70,74,52]
+  };
+  for (const [fighter, expected] of Object.entries(widths)) for (let i=0;i<keys.length;i++) {
+    const move = g.FIGHTERS[fighter].moves[keys[i]];
+    assert(Math.abs(move.hitboxes[0].w - expected[i] * 1.25) < 1e-8, `${fighter}.${keys[i]} did not gain 25% width`);
+    assert(move.startup > 0 && move.active > 0 && move.frames >= move.startup + move.active, `${fighter}.${keys[i]} lost timing`);
+    if (keys[i] === 'dsmash') assert(move.hitboxes.length === 2 && Math.abs(move.hitboxes[1].w - expected[i] * 1.25) < 1e-8,
+      `${fighter}: rear or forward sweep not enlarged`);
+  }
+  const vm = require('vm');
+  const test = vm.runInContext(`(() => {
+    const b = {x: 10, y: -70, w: 40, h: 30, t0: 2, t1: 3};
+    const m = {startup: 4, active: 4, frames: 20, damage: 9, bkb: 12, kbs: 25, hitboxes: [b]};
+    const tuned = tuneMove(m, 'ftilt', 100);
+    return {before: b, after: tuned.hitboxes[0], damage: tuned.damage, bkb: tuned.bkb, kbs: tuned.kbs};
+  })()`, ctx);
+  assert(test.before.w === 40 && test.before.h === 30, 'original hitbox was mutated');
+  assert(test.after.w === 50 && test.after.h === 34.5 && test.after.t0 === 2 && test.after.t1 === 3, 'range or window changed incorrectly');
+  assert(test.damage === 9 && test.bkb === 12 && test.kbs === 25, 'range pass altered damage or knockback');
+});
+
+test('range: forward F attacks hit beyond the old reach on both sides', () => {
+  const old = {valor:[18,56], grim:[14,66], astra:[16,66], vesper:[12,50], rook:[14,62]};
+  for (const key of Object.keys(old)) for (const face of [-1,1]) {
+    const {m,a,b,ctl} = itemFixture([key,'rook']);
+    a.facing = face; a.vx = 0; a.x = 0; b.y = a.y;
+    // The target's near edge is two units beyond the old authored hitbox.
+    const half = b.hurtbox.w / 2;
+    const oldEdge = (old[key][0] + old[key][1]) * a.scale;
+    b.x = face * (oldEdge + half + 2);
+    a.startAttack('ftilt',m);
+    for (let i=0;i<a.def.moves.ftilt.startup+3;i++) { a.x = 0; a.vx = 0; ctl.tick(1); }
+    assert(b.damage > 0, `${key}: extended F attack missed facing ${face}`);
+  }
+});
+
+test('range: Grim quake hits a wider area in front and behind once, not the whole stage', () => {
+  for (const face of [-1,1]) {
+    const {ctx} = run(); const m = newMatch(ctx, cast(4,['grim','valor','vesper','rook']), 'skyshrine', {rules:{items:'none'}});
+    const [a,front,back,far] = m.fighters;
+    for (const f of m.fighters) { f.y = m.stage.ground.y; f.vx = f.vy = 0; f.onGround = true; f.state = 'idle'; f.spawnProtect = 0; f.invincT = 0; }
+    a.x = 0; a.facing = face; front.x = face * 180; back.x = -face * 85; far.x = face * 360;
+    const angles = new Map(); const counts = new Map(); const orig = m.hitFighter.bind(m);
+    m.hitFighter = (atk,tgt,o) => { if(atk===a) { angles.set(tgt,o.angle); counts.set(tgt,(counts.get(tgt)||0)+1); } return orig(atk,tgt,o); };
+    let raw = {special:true}; const ctl = control(m,(f,i) => i === 0 ? raw : {});
+    ctl.tick(1); raw = {}; ctl.tick(65);
+    assert(front.damage > 0 && back.damage > 0, `quake missed an extended target facing ${face}`);
+    assert(far.damage === 0 && counts.get(front) === 1 && counts.get(back) === 1, 'quake reached too far or hit repeatedly');
+    assert(Math.cos(angles.get(front)*Math.PI/180)*face > 0 && Math.cos(angles.get(back)*Math.PI/180)*face < 0,
+      'quake did not launch targets away from Grim');
+  }
+});
+
+
+/* K28: recoveries, pickup feedback and expanded survival space. */
+test('ascent: natural uppercut connects three times in both directions even at high damage', () => {
+  for (const face of [-1,1]) for (const damage of [0,150]) {
+    const {m,a,b,ctl,set} = itemFixture(); a.facing = face; b.x = face * 35; b.damage = damage;
+    const hits = []; const orig = m.hitFighter.bind(m);
+    m.hitFighter = (attacker,target,o) => { if (attacker === a && target === b) hits.push(o.damage); return orig(attacker,target,o); };
+    set({up:true,special:true}); ctl.tick(1); set({}); ctl.tick(70);
+    assert(hits.join(',') === '3,3,6' && b.damage === damage + 12, `face ${face}, ${damage}%: hits ${hits}`);
+    assert(a.state !== 'special', 'ascent failed to end');
+  }
+});
+
+test('ascent: an opening miss, shield, teammate or invincibility cannot start follow-ups', () => {
+  for (const defense of ['miss','shield','team','invincible']) {
+    const {m,a,b,ctl,set} = itemFixture(); b.x = defense === 'miss' ? 350 : 35;
+    if (defense === 'team') { m.rules.teams = true; a.team = b.team = 1; }
+    if (defense === 'invincible') b.invincT = 100;
+    if (defense === 'shield') { b.shieldHP = 60; b.state = 'shield'; }
+    let hits = 0, blocks = 0; const hit = m.hitFighter.bind(m), shield = m.shieldHit.bind(m);
+    m.hitFighter = (x,y,o) => { if(x === a && y === b) hits++; return hit(x,y,o); };
+    m.shieldHit = (x,y,...rest) => { if(x === a && y === b) blocks++; return shield(x,y,...rest); };
+    set({up:true,special:true}); ctl.tick(1); set({});
+    // Keep a shield active through the opening without needing a second player's input.
+    for (let i=0;i<35;i++) { if (defense === 'shield') { b.shieldHP = 60; b.state = 'shield'; } ctl.tick(1); }
+    assert(hits === 0 && (defense === 'shield' || b.damage === 0), `${defense}: combo hit a protected or missed target`);
+    if (defense === 'shield') assert(blocks === 1, `shield got ${blocks} blocks instead of opening only`);
+  }
+});
+
+test('ascent: follow-ups recheck range, defenses and interruption', () => {
+  for (const mode of ['range','shield','team','invincible','interrupt']) {
+    const {m,a,b,ctl,set} = itemFixture(); b.x = 35;
+    const hits = []; const orig = m.hitFighter.bind(m);
+    m.hitFighter = (x,y,o) => { if(x===a && y===b) hits.push(o.damage); return orig(x,y,o); };
+    set({up:true,special:true}); ctl.tick(1); set({});
+    for (let i=0;i<30 && !hits.length;i++) ctl.tick(1);
+    assert(hits.length === 1, `${mode}: opening missed`);
+    if (mode === 'range') { b.x = 900; b.vx = b.vy = 0; }
+    if (mode === 'team') { m.rules.teams = true; a.team = b.team = 1; }
+    if (mode === 'invincible') b.invincT = 100;
+    if (mode === 'interrupt') m.hitFighter(null,a,{damage:1,bkb:20,kbs:0,angle:80});
+    for (let i=0;i<45;i++) { if(mode === 'shield') { b.shieldHP = 60; b.state = 'shield'; } ctl.tick(1); }
+    assert(hits.length === 1, `${mode}: follow-up landed despite changed conditions (${hits})`);
+  }
+});
+
+test('items: every pickup category displays a local named label and ring, replacing old labels', () => {
+  for (const key of ['heart','star','riftorb','crate','hammer','beamsword','bobomb','raygun']) {
+    const {m,a} = itemFixture(); a.damage = 80; const it = itemAt(m,a,key);
+    assert(m.tryPickup(a), `${key}: pickup failed`);
+    assert(m.fx.texts.some(t => t.str === 'PICKUP: ' + it.def.name), `${key}: missing label`);
+    assert(m.fx.rings.some(r => r.color === it.def.color), `${key}: missing ring`);
+    if (it.def.cat === 'heal') assert(m.fx.texts.some(t => t.str.startsWith('-')), `${key}: missing heal amount`);
+    a.held = null; const next = itemAt(m,a,'food'); assert(m.tryPickup(a), 'second pickup failed');
+    assert(m.fx.texts.filter(t => t.str.startsWith('PICKUP: ')).length === 1, 'pickup labels piled up');
+  }
+  const {m,a} = itemFixture(); const it = itemAt(m,a,'smashball'); it.smashBall = true;
+  assert(!m.tryPickup(a) && !m.fx.texts.some(t=>t.str.startsWith('PICKUP: ')), 'smash ball falsely announced as picked up');
+});
+
+test('blast: wider side and upper zones preserve bottom boundary and camera frames fighters', () => {
+  for (const stage of ['skyshrine','grandrift','colossalstadium','horizon']) {
+    const {ctx} = run(); const m = newMatch(ctx,cast(2,['valor','grim']),stage,{rules:{items:'none'}});
+    const b = m.blast, gd = m.stage.ground, [a,f] = m.fighters;
+    assert(m.stage.key === stage, `${stage}: stage fixture not found`);
+    assert(b.left <= -1550 && b.right >= 1550 && b.top === -1150 && b.bottom === 780, `${stage}: wrong bounds`);
+    if(m.stage.size === 'XL') assert(b.left <= gd.x-950 && b.right >= gd.x+gd.w+950, `${stage}: insufficient XL room`);
+    a.x = b.left+50; a.y = b.top+100; f.x = b.right-50; f.y = gd.y;
+    assert(!a.checkBlastNow(m) && !f.checkBlastNow(m), `${stage}: KO inside expanded zone`);
+    m.cam.W = 900; m.cam.H = 600;
+    for(let i=0;i<250;i++) m.cam.update([a,f]);
+    const view = m.cam.viewBounds;
+    assert(a.x > view.x && f.x < view.x+view.w && a.y-110 > view.y && f.y+30 < view.y+view.h, `${stage}: camera excludes fighters`);
+    f.x=b.right+1; assert(f.checkBlastNow(m), `${stage}: no KO outside side bound`);
+  }
+});
+
+test('physics: underside blocks an upward launch without pulling offstage fighters sideways', () => {
+  const {m,a} = itemFixture(), gd = m.stage.ground;
+  a.x = 0; a.y = gd.y+gd.h+16; a.vx=0; a.vy=-15; a.onGround=false; a.state='launch'; a.hitstun=20;
+  a.applyPhysics(m);
+  assert(a.y >= gd.y+gd.h+14 && a.vy === 0, 'fighter passed through the underside');
+  a.x = gd.x-120; a.y = gd.y+gd.h+16; a.vy=-15; a.vx=0; a.applyPhysics(m);
+  assert(a.x === gd.x-120 && a.y < gd.y+gd.h+14, 'underside collision affected an offstage recovery');
 });
 
 /* ---------------- entry ---------------- */

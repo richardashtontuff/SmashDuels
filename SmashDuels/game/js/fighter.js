@@ -17,7 +17,7 @@ const LEDGE_AUTO_CLIMB = 72;
 const DECK_LIP = 16;                  // px of overhang the deck still counts as floor
 const SLAB_EASE = 8;                  // px/tick the stage wall pushes an overlapping body out
 const HAZARD_REHIT = 45;              // ticks before a hazard may touch you again
-const ITEM_SWING = 24;                // ticks of recovery on a held item's swing/shot
+const ITEM_SWING = 24;                // ticks of recovery on a held ranged item shot
 const GRAB_HOLD_MAX = 120;            // ticks a grab can hold an opponent, pummels included
 const LUNGE_SLIDE = 40;               // px a run attack's lunge is allowed to carry it
 const GROUNDED_ACT = ['idle', 'walk', 'run', 'turn', 'crouch', 'air', 'jump', 'land',
@@ -372,13 +372,16 @@ class Fighter {
         return;
       }
 
+      // Dropping through a platform works even with an equipped item.
+      if (inp.downP && this.onPlatform && this.state !== 'land') {
+        this.dropThroughT = 12; this.y += 6; this.onGround = false; this.onPlatform = null;
+        this.state = 'fall'; return;
+      }
       // crouch
       if (inp.down && this.state !== 'land' && !this.held) {
         this.state = 'crouch';
         this.vx = approach(this.vx, 0, st.traction * 2.6);
         this.turnT = 0; this.endDash();
-        // drop through platform
-        if (inp.downP && this.onPlatform) { this.dropThroughT = 12; this.y += 6; this.onGround = false; this.onPlatform = null; }
         return;
       }
 
@@ -501,6 +504,7 @@ class Fighter {
     this.vy = Math.min(this.vy + grav, maxFall);
     if (this.hitstun <= 0 && this.state !== 'launch') this.vx *= 0.995;
 
+    const oldY = this.y;
     this.x += this.vx;
     this.y += this.vy;
 
@@ -550,6 +554,14 @@ class Fighter {
           }
         }
       }
+    }
+    // An upward launch from below cannot pass into the underside of the main
+    // deck. Resolve the crossing vertically, without snapping anyone from deep
+    // under the stage to a distant side wall.
+    const underside = gd.y + gd.h + 14;
+    if (!this.isMob && oldY >= underside && this.y < underside && this.vy < 0 &&
+        this.x > gd.x && this.x < gd.x + gd.w) {
+      this.y = underside; this.vy = 0; this.onGround = false; this.onPlatform = null;
     }
     this.prevY = this.y;
 
@@ -664,7 +676,7 @@ class Fighter {
   /* ---------------- shield ---------------- */
   updateShield(match) {
     if (this.grabbedBy) return;
-    if (this.input.shield && this.onGround && this.canAct() && this.shieldHP === 0 && this.shieldStun <= 0 && !this.held) {
+    if (this.input.shield && this.onGround && this.canAct() && this.shieldHP === 0 && this.shieldStun <= 0) {
       // shorthop guard: shield + direction = roll
       const h = this.horiz();
       if (this.input.leftP || this.input.rightP) {
@@ -785,9 +797,25 @@ class Fighter {
     this.animT = 0; this.turnT = 0; this.endDash();
     // per-box windows: a box with no explicit t0/t1 spans the whole active window
     this.action.hitboxes = (m.hitboxes || []).map((b) => Object.assign({}, b));
+    // Melee items augment the fighter's own F moves, including their timing,
+    // direction, animation and hit limits. G remains the normal special.
+    const weapon = this.held && (this.held.def.cat === 'batter' || this.held.type === 'hammer') ? this.held : null;
+    if (weapon) {
+      const a = this.action, perk = weapon.def.perk, hits = 1 + (m.multi || 0);
+      a.itemPerk = perk;
+      a.itemDamageBonus = (perk === 'heavy' ? 4 : perk === 'launch' ? 3 : perk === 'reach' ? 2 : 1) / hits;
+      a.damage += a.itemDamageBonus;
+      if (a.finish) { a.finish = Object.assign({}, a.finish); if (perk === 'launch' || perk === 'heavy') { a.finish.bkb += perk === 'launch' ? 10 : 6; a.finish.kbs += perk === 'launch' ? 22 : 10; } }
+      if (perk === 'launch' || perk === 'heavy') { a.bkb += perk === 'launch' ? 10 : 6; a.kbs += perk === 'launch' ? 22 : 10; }
+      if (perk === 'reach') for (const b of a.hitboxes) {
+        // Extend each box away from the fighter, including backwards aerials.
+        if (b.x + b.w / 2 < 0) b.x -= 16;
+        b.w += 16;
+      }
+    }
     if (!this.onGround) this.vy = Math.min(this.vy, 0) * 0.4; // slight float
     AUDIO.sfx('swing');
-    match.fx.swoosh(this, m.reach || 40);
+    match.fx.swoosh(this, (m.reach || 40) * 1.15);
     // small forward lunge for ground attacks
     if (this.onGround && (kind === 'ftilt' || kind === 'fsmash')) this.vx += this.facing * (kind === 'fsmash' ? 1.6 : 1.0);
     if (this.onGround && kind === 'dashattack') {
@@ -838,19 +866,25 @@ class Fighter {
 
   handleActions(match) {
     const inp = this.input;
-    // item pickup
-    if (!this.held) match.tryPickup(this);
+    // Contact pickup is automatic. A grab press on the pickup tick must not
+    // immediately throw/fire the new item or also start a grab.
+    const wasHolding = !!this.held;
+    const pickedUp = !wasHolding && match.tryPickup(this);
+    if (pickedUp && this.buf('grab')) { this.consume('grab'); return; }
+    // V uses held ranged/throwable items and drops a melee weapon. Without an
+    // item it is still the ordinary grab. Shield retains its normal behavior.
+    if (this.held && this.buf('grab')) {
+      this.consume('grab');
+      const shooting = this.held.def.cat === 'shoot';
+      const used = shooting ? match.useHeld(this) : match.throwHeld(this);
+      if (used) { this.shieldHP = 0; this.state = 'attack'; this.action = { type: 'item', dur: shooting ? ITEM_SWING : 20 }; this.actionT = 0; }
+      return;
+    }
     // aerial dodge
     if (!this.onGround && this.buf('shield') && !this.usedAirDodge) { this.consume('shield'); this.startAirDodge(match); return; }
-    // grab
     if (this.buf('grab') || (this.buf('shield') && this.buf('attack'))) {
       this.consume('grab'); this.consume('attack');
       this.startGrab(match); return;
-    }
-    // held item: attack swings, shield throws
-    if (this.held) {
-      if (this.buf('attack')) { this.consume('attack'); this.state='attack'; this.action={type:'item',dur:24}; this.actionT=0; match.useHeld(this); return; }
-      if (this.buf('shield')) { this.consume('shield'); this.state='attack'; this.action={type:'item',dur:20}; this.actionT=0; match.throwHeld(this); return; }
     }
     // attack — one press = one move. A held button does NOT auto-repeat, so
     // releasing always returns to idle; tapping again chains a fresh jab.
@@ -869,6 +903,7 @@ class Fighter {
       // Up + special or jump + special both select the recovery. Explicit
       // down takes precedence over jump; horizontal input can still steer up-B.
       if (v < 0) dir = 'u'; else if (v > 0) dir = 'd'; else if (inp.jump) dir = 'u'; else if (h !== 0) dir = 's';
+      if (dir === 's' && h) this.facing = h;
       if (this.startSpecial(dir, match) && dir === 'u') this.consume('jump');
       return;
     }
@@ -956,7 +991,25 @@ class Fighter {
          hit for one frame too long, with the extra tick landing after the
          animation had already left its strike pose. */
       const n = a.active || 1;
-      if (t >= a.startup && t < a.startup + n) this.checkHit(match, this.smashMultiplier());
+      if (t >= a.startup && t < a.startup + n) {
+        this.checkHit(match, this.smashMultiplier());
+        if (a.signature === 'comet' && !a.cometFired) {
+          a.cometFired = true;
+          const p = match.spawnProjectile({ owner: this, x: this.x + this.facing * 40, y: this.y - 56,
+            vx: this.facing * 8, vy: 0, damage: 3, bkb: 8, kbs: 24, angle: this.facing < 0 ? 135 : 45,
+            life: 24, color: this.pal.accent, size: 7, kind: 'fallingStar' });
+          for (const id of this.hitIds.keys()) p.hitIds.add(id);
+          match.fx.burst(p.x, p.y, this.pal.accent, 6, 2);
+        }
+        if (a.itemPerk === 'star' && !a.itemStarFired) {
+          a.itemStarFired = true;
+          const p = match.spawnProjectile({ owner: this, x: this.x + this.facing * 34 * this.scale, y: this.y - 56 * this.scale,
+            vx: this.facing * 10, vy: 0, damage: 4, bkb: 8, kbs: 22, angle: 40, life: 28, color: '#ffd23a', size: 7, kind: 'star' });
+          // An opponent already struck by the rod must not also eat its star.
+          for (const id of this.hitIds.keys()) p.hitIds.add(id);
+          match.fx.muzzle(p.x, p.y, '#ffd23a', this.facing);
+        }
+      }
       /* Re-arming a target is the resolver's job now (`rehitBlocked` compares the
          tick of the last hit against the move's re-hit spacing), so nothing clears
          this mid-move — the old blanket clear fired on a fixed tick and turned a
@@ -1030,8 +1083,29 @@ class Fighter {
     // shadow `sp` with the move's own kind so `sp.type` means projectile/dash/etc.
     const sp = Object.assign({}, a, { type: a.specialType || a.type });
     s.timer++;
+    if (['bladecombo', 'flurry', 'punchcombo', 'quake', 'risingdash'].includes(sp.type) &&
+        t >= sp.startup && t < sp.startup + (sp.active || 1) &&
+        (t - sp.startup) % (sp.rehit || 99) === 0) {
+      if (sp.type === 'quake') {
+        // The visual pulse follows the wider ground hitbox, without covering the playfield.
+        match.fx.ring(this.x + this.facing * 50 * this.scale, this.y - 8, this.pal.accent, 110 * this.scale, 16);
+        match.fx.dust(this.x + this.facing * 120 * this.scale, this.y, 6, this.pal.accent);
+        match.fx.dust(this.x - this.facing * 30 * this.scale, this.y, 6, this.pal.accent);
+        match.cam.shake(5);
+      }
+      else match.fx.arc(this.x + this.facing * 25, this.y - 55, -0.6 * this.facing, this.pal.accent, sp.type === 'bladecombo' ? 70 : 45, 10, this.facing);
+    }
     switch (sp.specialKey) {
       case 'n': {
+        if (sp.type === 'starfall' && s.fired < 3 && t >= sp.startup + s.fired * 6) {
+          const i = s.fired++;
+          const x = this.x + this.facing * (85 + i * 45) * this.scale;
+          match.spawnProjectile({ owner: this, x, y: this.y - 175 * this.scale, vx: this.facing * 1.2, vy: 8,
+            damage: sp.damage, bkb: sp.bkb, kbs: sp.kbs, angle: this.facing < 0 ? 180 - sp.angle : sp.angle, life: 28,
+            color: this.pal.accent, size: 10, kind: 'fallingStar' });
+          match.fx.burst(x, this.y - 175 * this.scale, this.pal.accent, 6, 2);
+          AUDIO.sfx('shoot');
+        }
         if (sp.type === 'projectile' && t >= sp.startup && !s.projFired) { s.projFired = true;
           match.spawnProjectile({
             owner: this, x: this.x + this.facing * 26, y: this.y - 56,
@@ -1053,11 +1127,21 @@ class Fighter {
         break;
       }
       case 's': {
+        if (sp.type === 'risingdash' && t >= sp.startup && !s.dashFired) {
+          s.dashFired = true;
+          this.vx = this.facing * 9; this.vy = -7;
+          this.onGround = false; this.onPlatform = null;
+          this.action.slide = sp.dist; this.action.slideFrom = this.x;
+          match.fx.speedLines(this); match.fx.burst(this.x, this.y - 35, this.pal.accent, 12);
+          AUDIO.sfx('swing');
+        }
         if (sp.type === 'dash' && t >= sp.startup && !s.dashFired) { s.dashFired = true;
-          this.vx = this.facing * 12; this.vy = sp.float ? -1.4 : 0;
+          this.vx = this.facing * (sp.rushSpeed || 12); this.vy = sp.float ? -1.4 : 0;
           // the rush is now allowed to actually go somewhere: `dist` is its budget
           this.action.slide = sp.dist || 150; this.action.slideFrom = this.x;
-          this.invincT = Math.max(this.invincT, 6);
+          this.invincT = Math.max(this.invincT, sp.rushInvuln || 6);
+          if (this.key === 'grim') match.fx.dust(this.x, this.y, 10, this.pal.accent);
+          if (this.key === 'astra') match.fx.burst(this.x, this.y - 45, this.pal.accent, 10, 3);
           AUDIO.sfx('dodge');
           match.fx.speedLines(this);
         }
@@ -1100,7 +1184,9 @@ class Fighter {
               if (this.key === 'rook') match.fx.lines.push({ x1: this.x, y1: this.y - 55, x2: this.x + this.facing * 18, y2: this.y - 135, color: this.pal.accent, w: 3, life: 5, t: 0 });
             }
           }
-          if (t >= sp.startup + 2 && !s.riseHit) { s.riseHit = true;
+          if (sp.ascentCombo) {
+            this.updateAscentCombo(match, sp, t, s);
+          } else if (t >= sp.startup + 2 && !s.riseHit) { s.riseHit = true;
             match.aoeHit(this, this.x, this.y - 70, 62, sp.damage, sp.bkb, sp.kbs, sp.angle);
             AUDIO.sfx('swing');
             match.fx.burst(this.x, this.y - 40, this.pal.accent, 14);
@@ -1122,6 +1208,14 @@ class Fighter {
         break;
       }
       case 'd': {
+        if (sp.type === 'orb' && t >= sp.startup && !s.orbFired) {
+          s.orbFired = true;
+          match.spawnProjectile({ owner: this, x: this.x + this.facing * 50, y: this.y - 60,
+            damage: sp.damage, bkb: sp.bkb, kbs: sp.kbs, angle: sp.angle, life: 110,
+            color: this.pal.accent, size: 26, kind: 'orb', pull: 1, static: true });
+          match.fx.ring(this.x + this.facing * 50, this.y - 60, this.pal.accent, 45, 15);
+          AUDIO.sfx('shoot');
+        }
         if (sp.type === 'counter') {
           this.counterActive = t <= sp.window;
           if (this.counterHit) {
@@ -1139,6 +1233,41 @@ class Fighter {
         break;
       }
     }
+  }
+
+  // Skyward Ascent only follows up on fighters struck by its opening hit. Each
+  // follow-up rechecks range, shields, invulnerability and teams; nobody is pinned
+  // or teleported, and the fixed schedule ends naturally if Valor is interrupted.
+  updateAscentCombo(match, sp, t, s) {
+    const cfg = sp.ascentCombo, start = sp.startup + 2;
+    if (t === start && !s.riseHit) {
+      s.riseHit = true; s.riseTargets = [];
+      for (const target of match.fighters) {
+        if (target === this || target.eliminated || target.invincible || match.sameTeam(this, target)) continue;
+        const hb = target.hurtbox;
+        if (Math.hypot(hb.x + hb.w / 2 - this.x, hb.y + hb.h / 2 - (this.y - 55 * this.scale)) >= 90) continue;
+        if (target.shieldHP > 0) { match.shieldHit(this, target, cfg.opening, null); continue; }
+        if (target.counterActive) { target.counterHit = this; target.counterActive = false; continue; }
+        s.riseTargets.push(target);
+        match.hitFighter(this, target, { damage: cfg.opening, bkb: 17, kbs: 4, angle: 90 });
+      }
+      AUDIO.sfx('swing');
+      match.fx.burst(this.x, this.y - 40, this.pal.accent, 14);
+    }
+    const phase = t === start + cfg.interval ? 1 : t === start + cfg.interval * 2 ? 2 : 0;
+    if (!phase || !s.riseTargets || !s.riseTargets.length) return;
+    for (const target of s.riseTargets) {
+      if (target.eliminated || target.invincible || match.sameTeam(this, target)) continue;
+      const hb = target.hurtbox;
+      if (Math.hypot(hb.x + hb.w / 2 - this.x, hb.y + hb.h / 2 - (this.y - 55 * this.scale)) >= cfg.reach) continue;
+      const damage = phase === 1 ? cfg.follow : cfg.finish;
+      if (target.shieldHP > 0) { match.shieldHit(this, target, damage, null); continue; }
+      if (target.counterActive) { target.counterHit = this; target.counterActive = false; continue; }
+      match.hitFighter(this, target, { damage, bkb: phase === 1 ? 17 : sp.bkb,
+        kbs: phase === 1 ? 4 : sp.kbs, angle: phase === 1 ? 90 : (this.facing < 0 ? 180 - sp.angle : sp.angle) });
+    }
+    match.fx.arc(this.x, this.y - 65, -Math.PI / 2, this.pal.accent, 55 + phase * 7, 10, this.facing);
+    AUDIO.sfx('swing');
   }
 
   /* The rectangles that are live on THIS tick, in world space, already mirrored by
@@ -1226,10 +1355,11 @@ class Fighter {
         const spent = (this.hitCount && this.hitCount.get(target.id)) || 0;
         if (spent >= cap) continue;
         if (this.hitCount) this.hitCount.set(target.id, spent + 1);
+        const hit = a.finish && spent === (a.multi || 0) ? a.finish : a;
         // shield?
         if (target.shieldHP > 0 && !a.grab) {
           this.hitIds.set(target.id, this.actionT);
-          match.shieldHit(this, target, a.damage, box);
+          match.shieldHit(this, target, hit.damage, box);
           continue;
         }
         if (target.counterActive) {
@@ -1243,9 +1373,15 @@ class Fighter {
         const sk = staleKey || a.key || 'jab';
         const stale = this.staleMult(sk);
         this.pushStale(sk);
+        // The new signature attacks use facing-relative launch angles, just as
+        // their hitboxes mirror. A left-facing strike must launch left, not right.
+        const signature = a.finish || a.key === 'dashattack' ||
+          (a.type === 'special' && ['bladecombo', 'flurry', 'punchcombo', 'quake', 'risingdash', 'dash'].includes(a.specialType));
+        const launchLeft = a.specialType === 'quake' ? target.x < this.x : this.facing < 0;
+        const hitAngle = signature && launchLeft ? 180 - hit.angle : hit.angle;
         match.hitFighter(this, target, {
-          damage: a.damage * mult * stale,
-          bkb: a.bkb, kbs: a.kbs, angle: a.angle, spike: a.spike,
+          damage: (hit.damage + (hit === a ? 0 : (a.itemDamageBonus || 0))) * mult * stale,
+          bkb: hit.bkb, kbs: hit.kbs, angle: hitAngle, spike: a.spike,
           heavy: a.charge ? 1 : 0, smashMult: mult,
         });
       }
@@ -1450,7 +1586,8 @@ class Fighter {
     this.x = clamp(this.spawnX !== undefined ? this.spawnX : 0, gd0.x + 120, gd0.x + gd0.w - 120);
     this.y = WORLD.respawnY;
     this.vx = this.vy = 0;
-    this.held = null; this.hasSmashBall = false;
+    if (this.held) { this.held.heldBy = null; this.held.dead = true; this.held = null; }
+    this.hasSmashBall = false;
     this.buffs = { star: 0, mushroom: 0, poison: 0, metal: 0, bunny: 0, flower: 0 };
     this.grabbedBy = null; this.grabbing = null;
     this.ledge = null; this.finalActive = 0; this.hazardCD = 0; this.itemCd = 0;
