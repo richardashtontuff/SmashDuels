@@ -528,12 +528,32 @@ class Projectile {
       if (f.invincible) continue;
       this.hitIds.add(f.id);
       if (f.shieldHP > 0) { match.shieldHit(this.owner || f, f, this.damage, this.box); }
-      else {
+      else if (this.kind === 'soulblast' && f.counterActive && this.owner) {
+        f.counterHit = this.owner; f.counterActive = false;
+      } else {
         match.hitFighter(this.owner, f, { damage: this.damage, bkb: this.bkb, kbs: this.kbs, angle: this.angle, proj: this });
+        // A blocked, countered, friendly or invincible target never heals the
+        // caster. An old projectile must not heal a KO'd/respawning owner.
+        if (this.kind === 'soulblast' && this.owner && !this.owner.eliminated &&
+            this.owner.state !== 'respawn' && this.healOnHit) {
+          const healed = Math.min(this.owner.damage, this.healOnHit);
+          this.owner.damage -= healed;
+          if (healed > 0) match.fx.text(this.owner.x, this.owner.y - 125 * this.owner.scale, '-' + Math.round(healed) + '%', '#b9ffb4', 16, 35);
+        }
       }
       match.fx.hitSpark(this.x, this.y, this.color, 0.5, Math.atan2(this.vy, this.vx));
       if (this.pierce && this.hitIds.size < this.pierce) continue;
       if (!this.pull) this.dead = true;
+    }
+    // Soul Reap's blast can also break target-mode targets and item containers.
+    if (!this.dead && this.kind === 'soulblast') {
+      const touchesTarget = (match.targets || []).some(t => !t.dead && aabb(this.box, {x:t.x-18,y:t.y-18,w:36,h:36}));
+      const touchesItem = match.items.some(it => !it.dead && !it.heldBy && aabb(this.box, it.box));
+      if (touchesTarget || touchesItem) {
+        match.itemsHitByAttack(this.owner, this.box, this.damage);
+        match.fx.hitSpark(this.x, this.y, this.color, 0.7, 0);
+        this.dead = true;
+      }
     }
     if (this.dead && this.kind === 'bomb' && !this.exploded) {
       this.exploded = true;
@@ -546,6 +566,24 @@ class Projectile {
   }
   draw(ctx, time) {
     ctx.save(); ctx.translate(this.x, this.y);
+    if (this.kind === 'soulblast') {
+      // A bright violet comet: its core and trailing energy grow as it charges.
+      const s = this.size, dir = this.vx < 0 ? -1 : 1;
+      ctx.scale(dir, 1); ctx.globalCompositeOperation = 'lighter';
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 2.2);
+      glow.addColorStop(0, '#fff'); glow.addColorStop(.25, '#efb9ff');
+      glow.addColorStop(.55, this.color); glow.addColorStop(1, 'rgba(113,26,205,0)');
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, s * 2.2, 0, TAU); ctx.fill();
+      ctx.globalAlpha = .68; ctx.fillStyle = this.color;
+      ctx.beginPath(); ctx.moveTo(s * .5, -s * .65);
+      ctx.quadraticCurveTo(-s * 1.4, -s * 1.1, -s * 3.4, 0);
+      ctx.quadraticCurveTo(-s * 1.4, s * 1.1, s * .5, s * .65); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = .95; ctx.fillStyle = '#fff1ff';
+      ctx.beginPath(); ctx.ellipse(0, 0, s * .72, s * .58, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#e6a0ff'; ctx.lineWidth = Math.max(1.5, s * .12);
+      ctx.beginPath(); ctx.arc(0, 0, s * 1.05, -.95, .95); ctx.stroke();
+      ctx.restore(); return;
+    }
     if (this.kind === 'fallingStar') {
       ctx.rotate(this.rot * 0.45); ctx.fillStyle = this.color;
       ctx.beginPath(); star(ctx, 0, 0, this.size * 1.4); ctx.closePath(); ctx.fill();

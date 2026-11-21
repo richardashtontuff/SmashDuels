@@ -18,5 +18,9 @@
   "rook": {
     "handX": 101.29,
     "handY": 3.41
+  },
+  "marrow": {
+    "handX": 122.14,
+    "handY": 8.06
   }
 }

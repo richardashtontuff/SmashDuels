@@ -628,6 +628,10 @@ class Match {
     attacker.grabbing = target; target.grabbedBy = attacker;
     attacker.grabT = 0;
     attacker.state = 'grabbing'; attacker.action = { type: 'holding', dur: 60 };
+    // A held Soul Reap is interrupted by a grab just as it is by a hit.
+    if (target.action && target.action.specialType === 'soulreap' && target.charging) {
+      target.action = null; target.charging = false; target.chargeT = 0;
+    }
     target.hitstun = 0;
     AUDIO.sfx('grab');
     this.fx.text(target.x, target.y - 120, 'GRAB', attacker.pal.accent, 22);

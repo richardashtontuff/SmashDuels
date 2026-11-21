@@ -17,7 +17,7 @@ const Sprites = (() => {
     { hue: 220, alpha: 0.10, light: -0.26 }, // shadow / dark
   ];
   // drawn height per fighter, in world px (the atlas is scaled to match)
-  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110 };
+  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126 };
 
   /* ============================================================
      ANIMATION
@@ -398,7 +398,7 @@ const Sprites = (() => {
           img.src = `assets/ledge/${key}.png${VQ}`;
         }
       }).catch(() => {}); // fall back to the atlas if an optional pose cannot load
-    for (const k of ['valor', 'grim', 'astra', 'vesper', 'rook']) {
+    for (const k of FIGHTER_KEYS) {
       fetch(`assets/atlas/${k}.json${VQ}`)
         .then(r => r && r.ok ? r.json() : Promise.reject(new Error('missing atlas ' + k)))
         .then(meta => {
@@ -789,8 +789,14 @@ const Sprites = (() => {
       const dur = Math.max(n, (act && act.dur) || n);
       i = f.charging ? Math.min(n - 1, Math.floor(n * 0.35))
         : clamp(Math.floor((f.actionT || 0) * n / dur), 0, n - 1);
+      const authored = at.meta.actionTiming && at.meta.actionTiming[name];
+      if (authored && !authored.fit) {
+        // Curated rows identify their actual impact pose. Never show its baked
+        // slash during startup, and hold it precisely while the hitbox is live.
+        i = attackIndex(f, frames, { k: authored.strike, wind: authored.wind });
+      }
       if (f.charging) wob = Math.sin((f.chargeT | 0) * 0.42);       // the windup shakes
-      swing = attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
+      swing = act && act.spinAxe ? null : attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
     } else {
       i = rowIndex(c, spec, frames, f.actionT | 0, (act && act.dur) || 1);
       if (spec.pulse) wob = Math.sin(c.t * 0.085) * spec.pulse;
@@ -806,7 +812,7 @@ const Sprites = (() => {
        Loops only.  A strike tile IS the hit window, and fading it into the
        follow-through is how you get a fighter that visually whiffs a connected move. */
     let mix = null;
-    if (!phase && n > 2 && !spec.once && !spec.hold && !spec.fit && SMOOTH) {
+    if (!phase && n > 2 && !spec.once && !spec.hold && !spec.fit && SMOOTH && !at.meta.actionTiming) {
       const fr = prog - Math.floor(prog);
       if (fr > 0.5) mix = { j: (i + 1) % n, f: SMOOTH_K * (fr - 0.5) / 0.5 };
     }
@@ -1366,7 +1372,11 @@ const Sprites = (() => {
     }
     const sel = pickAnim(f, time);
     if (!sel) return false;
-    const at = sel.at, ent = sel.frames[sel.i];
+    const at = sel.at;
+    // The orbiting spectral weapon replaces the stationary axe in this pose.
+    const spinning = f.state === 'special' && f.action && f.action.spinAxe &&
+      f.actionT >= f.action.startup && f.actionT < f.action.startup + f.action.active;
+    const ent = spinning && at.meta.spinBody ? at.meta.spinBody : sel.frames[sel.i];
     if (!ent) return false;
     const def = f.def;
     const s = at.scale * (f.scale || 1);
@@ -1418,7 +1428,11 @@ const Sprites = (() => {
 
     const vi = (f.palIdx || 0) % VARIANTS.length;
     const src = vi === 0 ? at.img : tinted(at, vi);
-    const dir = f.facing * (def.artFacing === undefined ? 1 : def.artFacing);
+    // Back air strikes behind the facing direction. Marrow's authored sweep
+    // faces right, so mirror that row rather than showing a forward slash while
+    // the live hitbox is behind him.
+    const backAir = f.key === 'marrow' && f.state === 'attack' && f.action && f.action.key === 'bair';
+    const dir = f.facing * (def.artFacing === undefined ? 1 : def.artFacing) * (backAir ? -1 : 1);
 
     ctx.save();
     const inv = f.invincT > 0 || f.respawnT > 0 || f.buffs.star > 0 || f.spawnProtect > 0;
@@ -1459,6 +1473,49 @@ const Sprites = (() => {
       blit(ctx, at, src, ent, false, sel.vfx);
     }
     ctx.restore();                    // also drops the metal filter
+
+    // Marrow's Soul Reap has an explicit hold-and-release charge. The gauge
+    // makes the capped power legible even when particles are hard to see.
+    const action = f.action;
+    if (f.state === 'special' && action && action.specialType === 'soulreap' && f.charging) {
+      const p = clamp(f.chargeT / action.chargeFrames, 0, 1);
+      const cx = f.x, cy = f.y - 68 * fs, radius = (30 + 16 * p) * fs;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = .25 + p * .4;
+      ctx.strokeStyle = f.pal.accent; ctx.lineWidth = (2 + p * 4) * fs;
+      ctx.beginPath(); ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(.04,p)); ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = .95;
+      const width = 68 * fs, barY = f.y - 158 * fs;
+      ctx.fillStyle = '#121222'; ctx.fillRect(cx - width / 2 - 2, barY - 2, width + 4, 9 * fs + 4);
+      ctx.fillStyle = '#6d2ca8'; ctx.fillRect(cx - width / 2, barY, width, 9 * fs);
+      ctx.fillStyle = p >= 1 ? '#ffffff' : '#d991ff'; ctx.fillRect(cx - width / 2, barY, width * p, 9 * fs);
+      if (p >= 1) { ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('MAX', cx, barY - 5); }
+      ctx.restore();
+    }
+
+    // An axe-shaped spectral echo sweeps a complete revolution around Marrow
+    // during the entire live recovery hitbox, tracking his rising position.
+    if (f.state === 'special' && action && action.spinAxe && at.meta.spinBlade !== undefined &&
+        f.actionT >= action.startup && f.actionT < action.startup + action.active) {
+      const p = clamp((f.actionT - action.startup) / Math.max(1, action.active - 1), 0, 1);
+      const angle = -Math.PI / 2 + f.facing * TAU * p;
+      const r = 69 * fs, cx = f.x, cy = f.y - 60 * fs;
+      const tile = at.tiles[at.meta.spinBlade];
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = f.pal.accent; ctx.lineCap = 'round'; ctx.globalAlpha = .45;
+      ctx.lineWidth = 12 * fs; ctx.beginPath();
+      ctx.arc(cx, cy, r, angle - f.facing * 1.5, angle, f.facing < 0); ctx.stroke();
+      ctx.globalAlpha = .95; ctx.strokeStyle = '#f2d7ff'; ctx.lineWidth = 3 * fs;
+      ctx.beginPath(); ctx.arc(cx, cy, r, angle - f.facing * 1.2, angle, f.facing < 0); ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      ctx.translate(cx, cy); ctx.rotate(angle); ctx.scale(fs, fs);
+      ctx.strokeStyle = '#241832'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(68, 0); ctx.stroke();
+      ctx.strokeStyle = '#ad7be2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(68, 0); ctx.stroke();
+      ctx.translate(68, 0); ctx.rotate(2.45);
+      ctx.drawImage(src, tile.x, tile.y, tile.w, tile.h, -36, -27, tile.w, tile.h);
+      ctx.restore();
+    }
 
     // ---- shield bubble: a readable dome, not a sprite-wide glow (a big
     //      shadowBlur turned Grim into a fireball and hid the fighter)

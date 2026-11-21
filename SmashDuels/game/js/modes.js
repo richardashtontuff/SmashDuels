@@ -7,7 +7,7 @@
 const Modes = (() => {
   let current = null;   // {kind, ...state}
 
-  const CLASSIC_ORDER = ['grim', 'vesper', 'astra', 'rook', 'valor'];
+  const CLASSIC_ORDER = ['grim', 'vesper', 'astra', 'rook', 'valor', 'marrow'];
 
   /* ---------------- Classic Mode ---------------- */
   function startClassic(fighterKey, palIdx, level) {
@@ -20,10 +20,10 @@ const Modes = (() => {
       losses: 0,
       alive: true,     // two losses ends the run
       stages: [
-        { label: 'STAGE 1 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 1) % 5], stage: 'skyshrine', lives: 2 },
-        { label: 'STAGE 2 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 2) % 5], stage: 'hollow', lives: 2 },
-        { label: 'STAGE 3 · BRAWL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 3) % 5], stage: 'range', lives: 2, doubles: true },
-        { label: 'STAGE 4 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 4) % 5], stage: 'cometreach', lives: 2 },
+        { label: 'STAGE 1 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 1) % CLASSIC_ORDER.length], stage: 'skyshrine', lives: 2 },
+        { label: 'STAGE 2 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 2) % CLASSIC_ORDER.length], stage: 'hollow', lives: 2 },
+        { label: 'STAGE 3 · BRAWL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 3) % CLASSIC_ORDER.length], stage: 'range', lives: 2, doubles: true },
+        { label: 'STAGE 4 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 4) % CLASSIC_ORDER.length], stage: 'cometreach', lives: 2 },
         { label: 'FINAL · BOSS', enemy: 'grim', stage: 'foundry', lives: 3, boss: true },
       ],
     };
@@ -35,7 +35,7 @@ const Modes = (() => {
     const s = c.stages[c.stageIdx];
     const cast = [{ key: c.fighterKey, palIdx: c.palIdx, isCPU: false, team: 0, label: 'P1' }];
     cast.push({ key: s.enemy, palIdx: 2, isCPU: true, team: 1, label: 'CPU' });
-    if (s.doubles) cast.push({ key: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(s.enemy) + 1) % 5], palIdx: 3, isCPU: true, team: 1, label: 'CPU' });
+    if (s.doubles) cast.push({ key: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(s.enemy) + 1) % CLASSIC_ORDER.length], palIdx: 3, isCPU: true, team: 1, label: 'CPU' });
     const rules = Object.assign({}, DEFAULT_RULES, {
       mode: 'stock', stocks: s.boss ? 1 : 2, items: s.boss ? 'low' : 'medium',
       aiLevel: Math.min(9, c.level + (s.boss ? 2 : c.stageIdx)), hazards: true, stage: s.stage,
@@ -253,9 +253,9 @@ const Modes = (() => {
     if (!match.multiman) return;
     if (match.multiman.spawned >= match.multiman.target) return;
     const gd = match.stage.ground;
-    const key = pick(['vesper', 'rok', 'rook', 'astra']);
+    const key = pick(FIGHTER_KEYS);
     const mob = new Fighter({
-      key: key === 'rok' ? 'rook' : key, palIdx: randInt(0, 5), playerIndex: 3, team: 1,
+      key, palIdx: randInt(0, 5), playerIndex: 3, team: 1,
       isCPU: true, cpuLevel: 3, label: 'MOB', stocks: 1,
       x: gd.x + gd.w * rand(0.15, 0.85), y: -260, facing: 1,
     });
