@@ -311,4 +311,111 @@ test('spike clusters are clear of all standard spawn slots',()=>{
   assert(m.fighters.every(f=>f.damage===0),`${key} ${fighter}: spawn overlaps spikes`);
  }
 });
+test('all selectable solid decks expose their actual edges, not one-way platforms or seams',()=>{
+ const h=boot(),{STAGE_KEYS,STAGES,stageLedges}=globals(h.ctx,['STAGE_KEYS','STAGES','stageLedges']);
+ for(const key of STAGE_KEYS){const s=STAGES[key],edges=stageLedges(s),gd=s.ground;
+  assert(edges.some(e=>e.x===gd.x && e.side===-1) && edges.some(e=>e.x===gd.x+gd.w && e.side===1),key+' missing outer edges');
+  assert(edges.length===(s.groundGaps?4:2),key+' wrong number of solid ledges');
+ }
+ const seam={ground:{x:-200,y:0,w:400,h:44},deckSegments:[{x:-200,w:200},{x:0,w:200}]};
+ assert(stageLedges(seam).length===2,'touching segments produced false ledges');
+ seam.deckSegments=[{x:-200,w:400},{x:-100,w:20}];assert(stageLedges(seam).length===2,'overlapping segments produced false ledges');
+ seam.ledges=false;assert(stageLedges(seam).length===0,'ledge-disabled stage has ledges');
+});
+for(const key of ['minecraftworld','greatcave']) for(const hazards of [true,false]) test(`${key}: both gap faces catch fighters and get-ups stay local (hazards ${hazards?'on':'off'})`,()=>{
+ for(const face of [{x:-90,side:1},{x:90,side:-1}]) for(const kind of ['climb','roll','attack','jump']) {
+  const m=match(key,{hazards}),f=m.fighters[0];f.x=face.x+face.side*25;f.y=20;f.vx=0;f.vy=2;f.state='fall';f.onGround=false;f.input={};f.hitstun=0;f.ledgeCD=0;
+  assert(f.tryLedgeGrab(m) && f.ledge.x===face.x && f.ledge.side===face.side,'wrong or missing gap grab');
+  assert(f.facing===-face.side && f.x===face.x+face.side*30*f.scale,'wrong hang location');
+  f.ledgeGetup(m,kind);
+  if(kind==='jump')assert(f.state==='jump' && f.vy<0 && Math.abs(f.x-(face.x+face.side*20))<1,'jump from wrong edge');
+  else assert(f.onGround && Math.abs(f.x-face.x)<80 && (f.x-face.x)*face.side<0,'get-up did not land on adjacent segment');
+ }
+});
+test('gap ledges respect solid floors, intentional drop, cooldown, rising and disabled ledges',()=>{
+ const m=match('greatcave'),f=m.fighters[0];f.state='fall';f.onGround=false;f.ledgeCD=0;f.input={};f.vy=2;f.y=10;
+ f.x=-100;assert(!f.tryLedgeGrab(m),'fighter over solid floor grabbed inside edge');
+ f.x=-65;f.input={down:true};assert(!f.tryLedgeGrab(m),'down did not prevent ledge grab');
+ f.input={};f.ledgeCD=5;assert(!f.tryLedgeGrab(m),'cooldown ignored');f.ledgeCD=0;
+ f.vy=-5;f.state='jump';assert(!f.tryLedgeGrab(m),'normal rising jump snapped to ledge');
+ f.vy=2;m.stage.ledges=false;assert(!f.tryLedgeGrab(m),'disabled ledge grabbed');m.stage.ledges=true;
+ assert(f.tryLedgeGrab(m),'fixture failed to grab');f.input={downP:true};f.updateLedge(m);
+ assert(f.state==='fall' && !f.ledge && f.ledgeCD>0 && !f.tryLedgeGrab(m),'drop immediately regrabbed');
+});
+test('ledge ownership distinguishes different faces with the same side and permits both gap edges',()=>{
+ const h=boot(),m=newMatch(h.ctx,cast(4,['valor','grim','briar','nomad']),'minecraftworld',{rules:{hazards:false,items:'none'}}),[outer,left,right,contender]=m.fighters;
+ outer.snapLedge(m,1,m.stage.ground.x+m.stage.ground.w);
+ left.x=-65;left.y=15;left.vy=2;left.state='fall';left.onGround=false;left.input={};
+ assert(left.tryLedgeGrab(m) && left.ledge.x===-90,'outer ledge incorrectly blocked same-side inner ledge');
+ right.x=65;right.y=15;right.vy=2;right.state='fall';right.onGround=false;right.input={};
+ assert(right.tryLedgeGrab(m) && right.ledge.x===90,'opposite gap edge incorrectly blocked');
+ contender.x=-65;contender.y=15;contender.vy=2;contender.state='fall';contender.onGround=false;contender.input={};
+ assert(!contender.tryLedgeGrab(m) && left.state==='ledge','occupied ledge was stolen');
+});
+for(const key of ['minecraftworld','greatcave']) for(const who of ['briar','nomad']) for(const hazards of [true,false]) test(`${key}: ${who} visibly grapples both gap ledges (hazards ${hazards?'on':'off'})`,()=>{
+ for(const side of [-1,1]){
+  const h=boot(),m=newMatch(h.ctx,cast(1,[who]),key,{rules:{hazards,items:'none'}}),f=m.fighters[0],c=control(m),edge=side*90;
+  f.x=side*35;f.y=145;f.vx=f.vy=0;f.onGround=false;f.state='fall';f.facing=-side;
+  f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(4);
+  assert(f.action?.vinePull?.edgeX===edge && f.state==='special','grapple did not target nearest gap ledge');
+  assert(who!=='nomad' || f.action.hookTether,'missing hook recovery');
+  for(let i=0;i<18 && f.state!=='ledge';i++){c.tick(1);assert(f.x>-90 && f.x<90,'tether passed through solid deck');}
+  assert(f.state==='ledge' && f.ledge.x===edge && !f.usedUpB && f.airJumpsLeft===f.def.stats.airJumps,'tether failed to hang/reset');
+  f.__raw={jump:true};c.tick(1);assert(f.state==='jump' && f.vy<0 && Math.abs(f.x-edge)<30,'ledge jump teleported');
+ }
+});
+test('tethers allow near-top gap recovery, avoid occupied faces, and release if claimed mid-pull',()=>{
+ for(const who of ['briar','nomad']){
+  const h=boot(),m=newMatch(h.ctx,cast(3,[who,'valor','grim']),'greatcave',{rules:{hazards:false,items:'none'}}),[f,a,b]=m.fighters;
+  f.x=-40;f.y=10;f.onGround=false;f.input={};const move={...f.def.specials.up};f.tryVineTether(m,move);
+  assert(move.vinePull?.edgeX===-90 && !move.vinePull.underDeck,'near-top gap treated as solid deck');
+  a.snapLedge(m,1,-90);const fallback={...f.def.specials.up};f.tryVineTether(m,fallback);
+  assert(fallback.vinePull?.edgeX===90,'tether did not use other free gap face');
+  b.snapLedge(m,-1,90);const blocked={...f.def.specials.up};f.tryVineTether(m,blocked);assert(!blocked.vinePull,'tether stole occupied face');
+  b.ledge=null;b.state='idle';f.action=fallback;f.state='special';f.ledgeCD=0;b.snapLedge(m,-1,90);f.stepVinePull(m);
+  assert(!f.action?.vinePull && b.state==='ledge','tether did not release when target claimed');
+ }
+});
+test('gap grapple from below a solid segment goes around its underside',()=>{
+ for(const who of ['briar','nomad']) for(const side of [-1,1]){
+  const h=boot(),m=newMatch(h.ctx,cast(1,[who]),'greatcave',{rules:{hazards:false,items:'none'}}),f=m.fighters[0],c=control(m);
+  f.x=side*180;f.y=150;f.vx=f.vy=0;f.onGround=false;f.state='fall';f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(4);
+  assert(f.action?.vinePull?.underDeck && f.action.vinePull.edgeX===side*90,'did not target gap from below segment');
+  for(let i=0;i<18 && f.state!=='ledge';i++){
+   c.tick(1);assert(!(Math.abs(f.x)>90 && f.y<m.stage.ground.h+14),'grapple passed through underside');
+  }
+  assert(f.state==='ledge' && f.ledge.x===side*90,'under-deck grapple did not finish');
+ }
+});
+test('tether does not reach through a solid segment to another opening',()=>{
+ const h=boot(),m=newMatch(h.ctx,cast(3,['briar','valor','grim']),'greatcave',{rules:{hazards:false,items:'none'}}),[f,a,b]=m.fighters;
+ m.stage.deckSegments=[{x:-300,y:0,w:200,h:44},{x:100,y:0,w:100,h:44},{x:400,y:0,w:200,h:44}];
+ a.snapLedge(m,1,-100);b.snapLedge(m,-1,100);f.x=0;f.y=10;f.onGround=false;f.input={};
+ const action={...f.def.specials.up,tetherRange:1000};f.tryVineTether(m,action);
+ assert(!action.vinePull,'grapple crossed a solid deck segment');
+});
+test('gap grapple cables and hang artwork anchor to each actual lip',async()=>{
+ const {makeCtx}=require('./harness'),h=boot({render:true});h.g.Sprites.load();await h.settle(35);const S=h.g.Sprites;
+ for(const key of ['minecraftworld','greatcave'])for(const who of ['briar','nomad'])for(const side of [-1,1]){
+  const m=newMatch(h.ctx,cast(1,[who]),key,{rules:{hazards:false,items:'none'}}),f=m.fighters[0],c=control(m),edge=side*90;
+  f.x=side*35;f.y=145;f.vx=f.vy=0;f.state='fall';f.onGround=false;f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(4);
+  const rec={ops:[]},ctx=makeCtx(rec),curves=[];ctx.quadraticCurveTo=(...args)=>curves.push(args);
+  assert(S.drawSpriteFighter(ctx,f,0),'grapple sprite missing');
+  assert(curves.some(q=>q[2]===edge && q[3]===0),'grapple cable not anchored to gap lip');
+  c.tick(18);assert(f.ledge?.x===edge,'no ledge hang to draw');const hang=S.LEDGE_ART[who],rec2={ops:[]};
+  assert(S.drawSpriteFighter(makeCtx(rec2),f,0),'hang art missing');const op=rec2.ops.find(o=>o.op==='drawImage');
+  const x=op.matrix[0]*(op.dx+hang.anchor.handX)+op.matrix[2]*(op.dy+hang.anchor.handY)+op.matrix[4];
+  const y=op.matrix[1]*(op.dx+hang.anchor.handX)+op.matrix[3]*(op.dy+hang.anchor.handY)+op.matrix[5];
+  assert(Math.abs(x-edge)<.01 && Math.abs(y)<.01,'hanging hand not fixed to gap lip');
+ }
+});
+test('ordinary falling fighters grab and climb either gap edge in real match updates',()=>{
+ for(const key of ['minecraftworld','greatcave'])for(const side of [-1,1]){
+  const h=boot(),m=newMatch(h.ctx,cast(1,['valor']),key,{rules:{hazards:false,items:'none'}}),f=m.fighters[0],c=control(m),edge=side*90;
+  f.x=side*65;f.y=10;f.vx=0;f.vy=2;f.state='fall';f.onGround=false;f.ledgeCD=0;f.__raw={};c.tick(1);
+  assert(f.state==='ledge' && f.ledge.x===edge,'fall did not grab actual gap edge');
+  f.__raw={up:true};c.tick(1);assert(f.onGround && f.state==='idle' && Math.abs(f.x-edge)<40,'climb did not reach nearby deck');
+  f.__raw={};c.tick(4);assert(f.onGround && Math.abs(f.x-edge)<60,'climb did not stay on deck');
+ }
+});
 T.run().then(fail=>{process.exitCode=fail?1:0;});

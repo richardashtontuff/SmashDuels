@@ -919,7 +919,7 @@ STAGES.wreckingcrew.platforms.push({x:-780,y:-185,w:260,h:18},{x:520,y:-185,w:26
 
 // Permanent openings are part of the layout, even with hazards disabled.
 // Each deck segment is a real collision surface; the original ground remains
-// the overall camera/blast-zone bounds and outer ledge reference.
+// the overall camera/blast-zone bounds. Each exposed deck face is a ledge.
 for (const key of ['minecraftworld','greatcave']) {
   const stage=STAGES[key], gd=stage.ground, gap={x:-90,w:180};
   stage.groundGaps=[gap];
@@ -933,6 +933,22 @@ function deckSegments(stage) { return stage.deckSegments || [stage.ground]; }
 function deckAt(stage,x,lip=0) {
   const segments=deckSegments(stage);
   return segments.find((p,i)=>x>p.x-(i===0?lip:0) && x<p.x+p.w+(i===segments.length-1?lip:0)) || null;
+}
+// One-way soft platforms are not solid ledges. Only exposed faces of solid
+// deck segments can be grabbed; adjacent/overlapping segments have no seam ledge.
+function stageLedges(stage) {
+  if (stage.ledges === false) return [];
+  const segments=deckSegments(stage).slice().sort((a,b)=>a.x-b.x), spans=[];
+  for(const p of segments) {
+    const last=spans[spans.length-1], end=p.x+p.w;
+    if(last && p.x<=last.end) last.end=Math.max(last.end,end);
+    else spans.push({start:p.x,end});
+  }
+  return spans.flatMap(p=>[{side:-1,x:p.start},{side:1,x:p.end}]);
+}
+function ledgeOccupied(match, fighter, side, x) {
+  return match.fighters.some(f=>f!==fighter && !f.eliminated && f.state==='ledge' &&
+    f.ledge && f.ledge.side===side && f.ledge.x===x);
 }
 
 // New stage-specific interactions. The Battlefield and meteor additions are
@@ -972,12 +988,12 @@ const STAGE_INFO = {
  tortimerisland: {about:'An XL tropical island with palm-height platforms and extra fighting space.', perk:'Healing fruit periodically drops from the palms; pick it up to recover damage.', hazards:'Fruit requires hazards on, even when ordinary items are off.'},
  pictochat2: {about:'A sketchbook-style arena with hand-drawn platforms.', perk:'Two different sets of platforms alternate, changing the available routes.', hazards:'With hazards off, the first set remains in place.'},
  newdonkcityhall: {about:'An XL city-hall arena with a wider deck and elevated scaffolds.', perk:'Two side lifts move up and down, carrying fighters standing on them.', hazards:'The lifts continue moving with hazards off; the main deck does not travel up the building.'},
- minecraftworld: {about:'An XL block-built grassland with a gap in the center of its floor and multiple soft platforms.', perk:'Attack the two lower block platforms to break them; they stay broken for the match.', hazards:'The breakable blocks are removed with hazards off. The floor gap and other platforms remain.'},
+ minecraftworld: {about:'An XL block-built grassland with a central floor gap, grabbable inner edges, and multiple soft platforms.', perk:'Attack the two lower block platforms to break them; they stay broken for the match.', hazards:'The breakable blocks are removed with hazards off. The floor gap and other platforms remain.'},
  mishimadojo: {about:'A flat wooden dojo enclosed by barriers when hazards are enabled.', perk:'Strong launches or repeated attacks break the side walls and ceiling. They repair after a delay once fighters are clear.', hazards:'With hazards off, the barriers are absent.'},
  wreckingcrew: {about:'An XL construction site with multiple scaffold levels.', perk:'Hit the central demolition charge to light its fuse. Its explosion damages nearby fighters and collapses a scaffold. Outer floor spikes hurt on contact.', hazards:'The charge, collapse and floor spikes require hazards on.'},
  flatzonex: {about:'A retro LCD-style arena whose platform silhouettes change.', perk:'Platforms alternate between layouts, and a temporary oil spill makes part of the floor slippery.', hazards:'With hazards off, the first layout stays and oil does not appear.'},
  kingoffighters: {about:'A flat tournament ring with invisible side barriers.', perk:'The walls stop movement and weak launches; a sufficiently strong outward launch breaks through for a KO.', hazards:'The ring barriers remain active even with hazards off.'},
- greatcave: {about:'An XL crystal cavern with several levels, a central floor gap, and marked danger zones.', perk:'Touching a danger zone deals damage; fighters already at 100% or higher are instantly KO’d.', hazards:'The danger zones are disabled with hazards off; the floor gap remains.'},
+ greatcave: {about:'An XL crystal cavern with several levels, a central gap with grabbable edges, and marked danger zones.', perk:'Touching a danger zone deals damage; fighters already at 100% or higher are instantly KO’d.', hazards:'The danger zones are disabled with hazards off; the floor gap remains.'},
  midgar: {about:'An industrial city arena with three platforms.', perk:'Touch summon materia when it appears to call a warned fire blast, platform lightning, or energy beam against opponents.', hazards:'Materia and summons require hazards on; the collector is spared.'},
  battlefield: {about:'A three-platform floating battlefield.', perk:'The elevated platforms rise and fall in a custom layout.', hazards:'Platforms stay still with hazards off. This motion is an original addition.'},
  smallbattlefield: {about:'A compact two-platform battlefield.', perk:'Platforms flash before temporarily disappearing one at a time.', hazards:'Both platforms stay present with hazards off. This is an original addition.'},

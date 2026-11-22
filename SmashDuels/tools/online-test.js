@@ -32,10 +32,21 @@ async function main(){
  a.send({type:'start'});await new Promise(r=>setTimeout(r,100));assert.equal(app.rooms.get(code).phase,'lobby','cannot start while players are viewing results');
  c.send({type:'return_room'});d.send({type:'return_room'});
  await a.wait('room',x=>x.phase==='lobby'&&x.players.every(p=>p.inLobby));
+ a.send({type:'character',key:'nomad'});await b.wait('room',x=>x.players.some(p=>p.id===ar.id && p.character==='nomad'));
  a.send({type:'stage',key:'minecraftworld'});await b.wait('room',x=>x.stage==='minecraftworld');a.send({type:'start'});start=await b.wait('start');assert.equal(start.stage,'minecraftworld');assert.equal(start.cast.length,4);assert.equal(start.rules.hazards,true);
  const live=app.rooms.get(code).match;live.state='play';const falling=live.fighters[0];
  falling.x=0;falling.y=-10;falling.vy=12;falling.vx=0;falling.state='fall';falling.onGround=false;falling.onPlatform=null;
  const gapSnap=await b.wait('snapshot',x=>x.data.fighters[0].y>10 && x.data.fighters[0].x===0);assert(gapSnap.data.fighters[0].y>10,'online fighter did not fall through gap');
+ // Briar's visible pull and inner ledge identity must reach both online clients.
+ const briar=live.fighters[1];briar.x=-35;briar.y=145;briar.vx=briar.vy=0;briar.state='fall';briar.onGround=false;briar.onPlatform=null;briar.usedUpB=false;briar.ledgeCD=0;briar.inputBuffer={};
+ b.send({type:'input',mask:(1<<2)|(1<<5)});
+ const pulled=await b.wait('snapshot',x=>x.data.fighters[1].action?.vinePull?.edgeX===-90);assert.equal(pulled.data.fighters[1].action.vinePull.side,1);
+ b.send({type:'input',mask:0});
+ const hanging=await a.wait('snapshot',x=>x.data.fighters[1].state==='ledge' && x.data.fighters[1].ledge?.x===-90);assert.equal(hanging.data.fighters[1].ledge.side,1);
+ b.send({type:'input',mask:1<<6});const jumping=await a.wait('snapshot',x=>x.data.fighters[1].state==='jump' && x.data.fighters[1].x>-115 && x.data.fighters[1].x<-45);assert(jumping.data.fighters[1].y<0,'online ledge jump failed');b.send({type:'input',mask:0});
+ const nomad=live.fighters[0];nomad.x=35;nomad.y=145;nomad.vx=nomad.vy=0;nomad.state='fall';nomad.onGround=false;nomad.onPlatform=null;nomad.usedUpB=false;nomad.ledgeCD=0;nomad.respawnT=0;nomad.eliminated=false;nomad.inputBuffer={};
+ a.send({type:'input',mask:(1<<2)|(1<<5)});const hook=await b.wait('snapshot',x=>x.data.fighters[0].action?.hookTether && x.data.fighters[0].action?.vinePull?.edgeX===90);assert.equal(hook.data.fighters[0].action.vinePull.side,-1);
+ a.send({type:'input',mask:0});const nomadHang=await b.wait('snapshot',x=>x.data.fighters[0].state==='ledge' && x.data.fighters[0].ledge?.x===90);assert.equal(nomadHang.data.fighters[0].ledge.side,-1);
  // A guest leaving mid-round returns the rest to the room, but the host closes it.
  d.send({type:'leave'});assert.match((await a.wait('round_aborted')).message,/Player 4 left/);
  await b.wait('room',x=>x.phase==='lobby'&&x.code===code&&x.players.length===3);
