@@ -1804,7 +1804,29 @@ const Backdrop = (() => {
   const cache = {};
   function hash(i) { const x = Math.sin(i * 127.1) * 43758.5453; return x - Math.floor(x); }
 
+  // Lazily loaded original illustrations; a normal procedural backdrop remains
+  // available until an image is ready (or if it fails to load).
+  function image(stage) {
+    const name = (stage.backdropForms && stage.backdropForms[stage.form]) || stage.backdrop;
+    if (!name || typeof Image === 'undefined') return null;
+    if (!cache[name]) {
+      const img = new Image();
+      img.src = 'assets/stages/' + name + '.jpg';
+      cache[name] = img;
+    }
+    return cache[name];
+  }
+  function cover(ctx, img, w, h) {
+    const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+    const iw = img.naturalWidth * scale, ih = img.naturalHeight * scale;
+    ctx.drawImage(img, (w-iw)/2, (h-ih)/2, iw, ih);
+  }
   function draw(ctx, stage, cam, time) {
+    const img = image(stage);
+    if (img && img.complete && img.naturalWidth) {
+      cover(ctx, img, cam.W, cam.H);
+      return;
+    }
     const W = 1600, H = 1000;
     const [c0, c1, c2] = stage.bg;
     // sky
@@ -2061,7 +2083,21 @@ const Backdrop = (() => {
   function drawPlatforms(ctx, stage, time) {
     ctx.save();
     for (const p of stage.platforms) {
+      if (p.active === false) continue;
       const px = p.cx !== undefined ? p.cx : p.x, py = p.cy !== undefined ? p.cy : p.y;
+      ctx.globalAlpha = p.warning && Math.floor(time/100)%2===0 ? .45 : 1;
+      if (stage.surface === 'ink') {
+        ctx.fillStyle = '#292923'; ctx.fillRect(px, py-2, p.w, p.h);
+        ctx.fillStyle = '#827e6c'; ctx.fillRect(px+4, py+3, p.w-8, 2);
+        continue;
+      }
+      if (stage.surface === 'blocks') {
+        ctx.fillStyle = '#805b3c'; ctx.fillRect(px, py, p.w, p.h);
+        ctx.fillStyle = '#72ac45'; ctx.fillRect(px, py-2, p.w, 7);
+        ctx.strokeStyle = '#543c2c'; ctx.lineWidth = 2;
+        for (let x=px+24; x<px+p.w; x+=24) { ctx.beginPath(); ctx.moveTo(x,py+7); ctx.lineTo(x,py+p.h); ctx.stroke(); }
+        continue;
+      }
       const pg = ctx.createLinearGradient(0, py, 0, py + p.h + 6);
       pg.addColorStop(0, shade(stage.bg[2], 0.5));
       pg.addColorStop(0.5, shade(stage.bg[2], 0.16));
@@ -2081,8 +2117,46 @@ const Backdrop = (() => {
   }
 
   function drawStageBody(ctx, stage, time) {
+    // Draw each solid piece separately so openings never look like solid floor.
+    for (const gd of deckSegments(stage)) drawDeckBody(ctx, Object.assign({},stage,{ground:gd}), time);
+    if (stage.groundGaps) {
+      ctx.save();ctx.strokeStyle=withAlpha(stage.accent,.85);ctx.lineWidth=4;
+      for (const gap of stage.groundGaps) {
+        for (const x of [gap.x,gap.x+gap.w]) {
+          ctx.beginPath();ctx.moveTo(x,stage.ground.y);ctx.lineTo(x,stage.ground.y+40);ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+  function drawDeckBody(ctx, stage, time) {
     const gd = stage.ground;
     ctx.save();
+    // Give reference-inspired stages a physical surface instead of the generic
+    // glowing sci-fi slab, while retaining exactly the same collision deck.
+    if (stage.surface) {
+      const colors = {
+        sand:['#e6cf87','#b9915a','#8c693f'], grass:['#83c75a','#866545','#614630'], blocks:['#70b747','#795133','#513525'],
+        wood:['#b18a57','#684323','#452b1a'], ink:['#34352e','#55564b','#31332d'],
+        steel:['#9fa4a5','#59666b','#303b41'], stone:['#bdb5a0','#817b6c','#514b43'],
+      };
+      const c=colors[stage.surface];
+      ctx.fillStyle=c[2]; ctx.fillRect(gd.x,gd.y,gd.w,90);
+      ctx.fillStyle=c[1]; ctx.fillRect(gd.x,gd.y,gd.w,52);
+      ctx.fillStyle=c[0]; ctx.fillRect(gd.x,gd.y-3,gd.w,9);
+      ctx.strokeStyle='rgba(0,0,0,.23)'; ctx.lineWidth=2;
+      if (stage.surface==='blocks' || stage.surface==='stone') {
+        for(let y=gd.y+10; y<gd.y+90; y+=26) {
+          ctx.beginPath(); ctx.moveTo(gd.x,y); ctx.lineTo(gd.x+gd.w,y); ctx.stroke();
+          for(let x=gd.x+((Math.floor((y-gd.y)/26)%2)*30);x<gd.x+gd.w;x+=60) {
+            ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+26); ctx.stroke();
+          }
+        }
+      } else if (stage.surface==='wood' || stage.surface==='steel') {
+        for(let x=gd.x+55;x<gd.x+gd.w;x+=55) {ctx.beginPath();ctx.moveTo(x,gd.y+8);ctx.lineTo(x,gd.y+52);ctx.stroke();}
+      }
+      ctx.restore(); return;
+    }
     // main platform
     const grad = ctx.createLinearGradient(0, gd.y - 10, 0, gd.y + 100);
     grad.addColorStop(0, shade(stage.bg[2], 0.55));
@@ -2113,6 +2187,88 @@ const Backdrop = (() => {
     ctx.restore();
   }
 
+  function drawStageFeatures(ctx, stage, frame, hazards) {
+    const gd=stage.ground;
+    if (stage.stageForms && stage.form !== 'normal') {
+      const colors={electric:'#ffe86b',flying:'#b5eaff',ground:'#c4955d',ice:'#b6f3ff',grass:'#92df68',water:'#6ccbf3',fire:'#ff9c56',rock:'#b5a99a'};
+      ctx.save();ctx.fillStyle=colors[stage.form]||'#ffffff';ctx.globalAlpha=.72;
+      ctx.fillRect(gd.x,gd.y-7,gd.w,7);
+      ctx.globalAlpha=.95;ctx.font='bold 22px sans-serif';ctx.textAlign='center';
+      ctx.fillText(stage.form.toUpperCase(),0,gd.y+40);
+      if(stage.form==='electric') for(const side of [-1,1]) {
+        for(let i=0;i<5;i++){const x=side*(160+i*85);ctx.beginPath();ctx.moveTo(x-side*12,gd.y-16);ctx.lineTo(x+side*8,gd.y-16);ctx.lineTo(x+side*2,gd.y-22);ctx.moveTo(x+side*8,gd.y-16);ctx.lineTo(x+side*2,gd.y-10);ctx.strokeStyle='#ffed8a';ctx.lineWidth=3;ctx.stroke();}
+      }
+      ctx.restore();
+    }
+    if(stage.springPads && hazards && frame%600<300){
+      ctx.save();ctx.fillStyle='#ffda59';ctx.strokeStyle='#f7514a';ctx.lineWidth=4;
+      for(const x of [gd.x+55,gd.x+gd.w-115]) {ctx.fillRect(x,gd.y-8,60,8);ctx.strokeRect(x,gd.y-8,60,8);}
+      const p=stage.platforms[0];ctx.fillRect(p.x,p.y-7,p.w,7);ctx.restore();
+    }
+  }
+
+  // Warning and interactable artwork mirrors the authoritative stage state.
+  function drawStageMechanics(ctx, stage, frame, hazards) {
+    if (!hazards) return;
+    const state=stage.mechanic || {}, gd=stage.ground;
+    ctx.save();
+    // High-contrast physical spike shapes match their authoritative hitboxes.
+    for (const spike of stage.floorSpikes || []) {
+      ctx.fillStyle='#3b2021';ctx.fillRect(spike.x,gd.y-6,spike.w,6);
+      ctx.fillStyle='#ffb55c';ctx.strokeStyle='#4a1a21';ctx.lineWidth=2;
+      for (let x=spike.x;x<spike.x+spike.w;x+=18) {
+        ctx.beginPath();ctx.moveTo(x,gd.y-5);ctx.lineTo(x+9,spike.y);ctx.lineTo(Math.min(x+18,spike.x+spike.w),gd.y-5);ctx.closePath();ctx.fill();ctx.stroke();
+      }
+    }
+    if(stage.key==='mishimadojo' && state.walls){
+      const w=state.walls;ctx.fillStyle='rgba(227,197,150,.35)';ctx.strokeStyle='rgba(255,230,190,.8)';ctx.lineWidth=5;
+      if(!w.left.broken){ctx.fillRect(gd.x,-500,25,500);ctx.strokeRect(gd.x,-500,25,500);}
+      if(!w.right.broken){ctx.fillRect(gd.x+gd.w-25,-500,25,500);ctx.strokeRect(gd.x+gd.w-25,-500,25,500);}
+      if(!w.roof.broken){ctx.fillRect(gd.x,-500,gd.w,18);ctx.strokeRect(gd.x,-500,gd.w,18);}
+    }
+    if(state.oil){ctx.fillStyle='rgba(35,35,28,.8)';ctx.beginPath();ctx.ellipse(state.oil.x,gd.y-3,state.oil.w/2,9,0,0,TAU);ctx.fill();}
+    if(stage.key==='greatcave') for(const x of [-620,620]) {
+      ctx.fillStyle='rgba(255,80,28,.8)';ctx.fillRect(x-70,gd.y-10,140,10);
+      ctx.fillStyle='#ffe298';ctx.font='bold 17px sans-serif';ctx.textAlign='center';ctx.fillText('DANGER 100%',x,gd.y+23);
+    }
+    if(state.bomb && !state.bomb.respawn){
+      const b=state.bomb;ctx.fillStyle=b.fuse && Math.floor(frame/5)%2?'#ffac46':'#272936';
+      ctx.beginPath();ctx.arc(b.x,b.y,24,0,TAU);ctx.fill();ctx.strokeStyle='#f8c55f';ctx.lineWidth=4;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(b.x,b.y-24);ctx.lineTo(b.x+13,b.y-37);ctx.stroke();
+      if(b.fuse){ctx.fillStyle='#fff2a3';ctx.beginPath();ctx.arc(b.x+13,b.y-37,5,0,TAU);ctx.fill();}
+    }
+    if(state.materia){const orb=state.materia;
+      ctx.fillStyle='#7dffb8';ctx.globalAlpha=.85;ctx.beginPath();ctx.arc(orb.x,orb.y,23+3*Math.sin(frame*.1),0,TAU);ctx.fill();
+      ctx.strokeStyle='#e6fff1';ctx.lineWidth=4;ctx.stroke();ctx.globalAlpha=1;
+      ctx.fillStyle='#d1ffea';ctx.textAlign='center';ctx.font='bold 18px sans-serif';ctx.fillText('SUMMON',orb.x,orb.y-40);
+    }
+    if(state.summon){
+      const summon=state.summon;ctx.textAlign='center';ctx.font='bold 22px sans-serif';ctx.fillStyle='#edffff';ctx.fillText(summon.kind.toUpperCase()+' SUMMON',0,-420);
+      if(summon.kind==='bolt'){
+        ctx.strokeStyle='#9fffff';ctx.lineWidth=5;ctx.globalAlpha=.45+.35*Math.sin(frame*.2);
+        for(const p of stage.platforms) if(p.active!==false)ctx.strokeRect(p.x-4,p.y-8,p.w+8,p.h+12);
+      } else {
+        const radius=summon.kind==='fire'?210:120;ctx.fillStyle=summon.kind==='fire'?'rgba(255,100,45,.28)':'rgba(110,240,255,.25)';
+        ctx.beginPath();ctx.ellipse(summon.x,gd.y-3,radius,24,0,0,TAU);ctx.fill();
+        ctx.strokeStyle=summon.kind==='fire'?'#ff9d59':'#aaffff';ctx.lineWidth=4;ctx.stroke();
+        if(summon.t>=90){ctx.globalAlpha=.55;ctx.fillStyle=ctx.strokeStyle;ctx.fillRect(summon.x-radius/2,-500,radius,500);}
+      }
+      ctx.globalAlpha=1;
+    }
+    if(state.strike){
+      const strike=state.strike,r=strike.type==='meteor'?135:100;
+      ctx.fillStyle=strike.type==='meteor'?'rgba(255,75,20,.28)':'rgba(80,220,255,.28)';
+      ctx.strokeStyle=strike.type==='meteor'?'#ff9c54':'#b4f9ff';ctx.lineWidth=4;
+      ctx.beginPath();ctx.ellipse(strike.x,gd.y-3,r,24,0,0,TAU);ctx.fill();ctx.stroke();
+      if(strike.type==='meteor' && strike.phase>=30 && strike.phase<90){
+        const y=-600+(strike.phase-30)*10;
+        ctx.strokeStyle='#ffb650';ctx.lineWidth=13;ctx.beginPath();ctx.moveTo(strike.x-45,y-90);ctx.lineTo(strike.x,y);ctx.stroke();
+        ctx.fillStyle='#ff762d';ctx.beginPath();ctx.arc(strike.x,y,28,0,TAU);ctx.fill();
+      } else if(strike.type==='beam' && strike.phase>=90) {ctx.fillStyle='rgba(130,240,255,.55)';ctx.fillRect(strike.x-50,-650,100,650);}
+    }
+    ctx.restore();
+  }
+
   function drawVignette(ctx, W, H) {
     ctx.save();
     const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.55, W / 2, H / 2, H * 1.08);
@@ -2121,5 +2277,5 @@ const Backdrop = (() => {
     ctx.restore();
   }
 
-  return { draw, drawStageBody, drawPlatforms, drawVignette };
+  return { draw, drawStageBody, drawPlatforms, drawVignette, drawStageFeatures, drawStageMechanics, image, cover };
 })();

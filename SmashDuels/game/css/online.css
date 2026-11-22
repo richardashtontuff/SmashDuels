@@ -94,3 +94,8 @@
 .online-showcase-note p { color:#53606b; font-size:11px; margin:10px 0 0; }
 .online-palette-chip { display:inline-block; width:12px; height:12px; vertical-align:middle; border:2px solid; }
 #online-notice { position:fixed; top:18px; left:50%; transform:translateX(-50%); z-index:100; max-width:min(90vw,580px); padding:12px 18px; border:2px solid #f3ce3c; background:#172333; color:#fff; box-shadow:4px 4px 0 #080c14; font-size:13px; font-weight:800; text-align:center; pointer-events:none; }
+
+.online-stage-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.online-stage-actions #online-hazards { background:#e3e6df; color:#171d23; }
+.online-stage-actions #online-hazards[aria-pressed="true"] { background:#f5c94c; }
+.online-stage-actions #online-hazards:disabled { opacity:.75; cursor:default; }

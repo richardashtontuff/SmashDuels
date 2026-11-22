@@ -43,6 +43,7 @@ const UI = (() => {
     if (!next) return;
     const previous = document.getElementById(current);
     const changed = current !== id;
+    if (changed) StageInfo.close();
     let backwards = false;
     let origin = { x: 50, y: 50 };
     let restore = null;
@@ -306,12 +307,13 @@ const UI = (() => {
     grid.innerHTML = STAGE_KEYS.map((k) => {
       const s = STAGES[k];
       const selected = k === rules.stage && !rules.stageRandom;
-      return `<button type="button" class="scell ${selected ? 'sel' : ''}" data-k="${k}" style="--c:${s.accent}" aria-pressed="${selected}">
+      return `<div class="stage-tile"><button type="button" class="scell ${selected ? 'sel' : ''}" data-k="${k}" style="--c:${s.accent}" aria-pressed="${selected}">
         <canvas class="sthumb" data-stage="${k}" width="260" height="130"></canvas>
         <span class="stage-card-meta"><span>${s.size === 'XL' ? 'XL ARENA' : 'STANDARD'}</span><span>${selected ? 'SELECTED ✓' : 'SELECT →'}</span></span>
         <b>${s.name}</b><small>${s.sub}</small>
-      </button>`;
+      </button><button type="button" class="stage-info-button" data-info="${k}" aria-label="About ${s.name}">i</button></div>`;
     }).join('');
+    $$('#stage-grid .stage-info-button').forEach(b => b.addEventListener('click', () => StageInfo.open(b.dataset.info, b)));
     $$('#stage-grid .scell').forEach(c => c.addEventListener('click', () => {
       const key = c.dataset.k; rules.stage = key; rules.stageRandom = false; AUDIO.sfx('menu'); buildStages();
       const selected = document.querySelector(`#stage-grid .scell[data-k="${key}"]`);
@@ -328,6 +330,7 @@ const UI = (() => {
     $('#stage-go').onclick = () => { AUDIO.sfx('confirm'); startFromSelect(); };
   }
 
+  const stageThumbLoading = new WeakSet();
   function drawStageThumbs() {
     $$('#stage-grid canvas.sthumb').forEach(cv => {
       const ctx = cv.getContext('2d');
@@ -336,15 +339,27 @@ const UI = (() => {
       const g = ctx.createLinearGradient(0, 0, 0, H);
       g.addColorStop(0, s.bg[0]); g.addColorStop(0.6, s.bg[1]); g.addColorStop(1, s.bg[2]);
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const img = Backdrop.image(s);
+      if (img && img.complete && img.naturalWidth) Backdrop.cover(ctx, img, W, H);
+      else if (img && !img.complete && !stageThumbLoading.has(img)) {
+        stageThumbLoading.add(img);
+        img.addEventListener('load', () => drawStageThumbs(), {once:true});
+      }
       // ground
       const gd = s.ground;
       const sx = W / Math.max(1500, gd.w + 250);
       const ox = W / 2;
-      ctx.fillStyle = shade(s.bg[2], 0.2);
-      ctx.fillRect(ox + gd.x * sx, H * 0.72, gd.w * sx, 12);
-      ctx.fillStyle = withAlpha(s.accent, 0.9);
-      ctx.fillRect(ox + gd.x * sx, H * 0.72 - 2, gd.w * sx, 2.5);
+      for (const part of deckSegments(s)) {
+        ctx.fillStyle = shade(s.bg[2], 0.2);
+        ctx.fillRect(ox + part.x * sx, H * 0.72, part.w * sx, 12);
+        ctx.fillStyle = withAlpha(s.accent, 0.9);
+        ctx.fillRect(ox + part.x * sx, H * 0.72 - 2, part.w * sx, 2.5);
+      }
+      for (const spike of s.floorSpikes || []) {
+        ctx.fillStyle='#ff9a50';ctx.fillRect(ox + spike.x*sx,H*.72-5,spike.w*sx,3);
+      }
       s.platforms.forEach(p => {
+        if (p.motion && ((p.motion.kind === 'forms' && !p.motion.forms.includes('normal')) || (p.motion.kind === 'sketch' && p.motion.group !== 0))) return;
         ctx.fillStyle = shade(s.bg[2], 0.3);
         ctx.fillRect(ox + p.x * sx, H * 0.72 - (-p.y) * sx * 0.9, p.w * sx, 4);
         ctx.fillStyle = withAlpha(s.accent, 0.7);
@@ -887,6 +902,18 @@ const Game = (() => {
 
     Backdrop.drawStageBody(ctx, match.stage, match.time);
     Backdrop.drawPlatforms(ctx, match.stage, match.time);
+    Backdrop.drawStageFeatures(ctx, match.stage, match.frame, match.rules.hazards);
+    Backdrop.drawStageMechanics(ctx, match.stage, match.frame, match.rules.hazards);
+
+    // Acid is part of the world so its visible surface matches collision height.
+    if (match.rules.hazards && match.stage.hazard && match.stage.hazard.type === 'acid') {
+      const hz=match.stage.hazard, y=hz.y ?? hz.bottom;
+      ctx.save(); ctx.globalAlpha=.7; ctx.fillStyle='#86ed4b';
+      ctx.fillRect(match.blast.left-200,y,match.blast.right-match.blast.left+400,500);
+      ctx.globalAlpha=1; ctx.fillStyle='#d8ffa6';
+      ctx.fillRect(match.blast.left-200,y,match.blast.right-match.blast.left+400,5);
+      ctx.restore();
+    }
 
     // haze / stage hazard
     if (match.stage.hazard && match.stage.hazard.type === 'lava' && match.rules.hazards) {

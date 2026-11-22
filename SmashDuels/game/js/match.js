@@ -92,10 +92,17 @@ class Match {
       left: this.stage.size === 'XL' ? Math.min(WORLD.blast.left, ground.x - 950) : WORLD.blast.left,
       right: this.stage.size === 'XL' ? Math.max(WORLD.blast.right, ground.x + ground.w + 950) : WORLD.blast.right,
     });
+    this.stage.form = 'normal';
+    this.stage.mechanic = {};
+    if (this.stage.key === 'mishimadojo') this.stage.mechanic.walls = Object.fromEntries(['left','right','roof'].map(k=>[k,{hp:35,broken:0}]));
     // materialize moving platforms
     this.stage.platforms.forEach((p, i) => {
       p.baseX = p.x; p.baseY = p.y; p.phase = p.phase || 0;
       p.cx = p.x; p.cy = p.y;
+      p.active = p.breakHP ? !!this.rules.hazards : !p.motion ||
+        (p.motion.kind === 'forms' ? p.motion.forms.includes('normal') :
+         p.motion.kind === 'sketch' ? p.motion.group === 0 :
+         p.motion.kind === 'cloud' ? !!this.rules.hazards : true);
     });
     this.W = opts.W || 1600; this.H = opts.H || 1000;
     this.cam = new Camera(this.W, this.H);
@@ -196,7 +203,7 @@ class Match {
     const moveBy = (f, d, amt) => {
       if (!(amt > 0)) return 0;
       const got = Math.min(amt, Math.max(0, room(f, d)));
-      if (got > 0.01) { f.x += d * got; f.confine(gd); }
+      if (got > 0.01) { f.x += d * got; for (const segment of deckSegments(this.stage)) f.confine(segment); }
       return got;
     };
     for (let pass = 0; pass < PASSES; pass++) {
@@ -235,6 +242,46 @@ class Match {
     }
   }
 
+  // Ring walls catch ordinary movement and weak launches but not a sufficiently
+  // fast outward hitstun launch. Walls immediately reform for other fighters.
+  resolveRingWall(f) {
+    if (!this.stage.ringWalls || f.eliminated || f.state==='respawn' || f.y<this.blast.top) return false;
+    const gd=this.stage.ground, left=gd.x+16, right=gd.x+gd.w-16;
+    const side=f.x<left ? -1 : f.x>right ? 1 : 0;
+    if (!side) return false;
+    if (f.hitstun>0 && f.vx*side>=27) {
+      this.fx.hitSpark(side<0?left:right,f.y-45,'#c8efff',1.4,0);
+      this.cam.shake(8);
+      this.koFighter(f,f.lastHitBy);
+      return true;
+    }
+    f.x=side<0?left:right;
+    if(f.vx*side>0) f.vx=f.hitstun>0 ? -f.vx*.3 : 0;
+    return false;
+  }
+
+  breakDojoWall(name) {
+    const wall=this.stage.mechanic.walls[name];
+    if(wall.broken>0) return;
+    wall.broken=600;wall.hp=35;
+    const gd=this.stage.ground, x=name==='left'?gd.x:name==='right'?gd.x+gd.w:0, y=name==='roof'?-500:-190;
+    this.fx.burst(x,y,'#d9bf8d',16);this.cam.shake(4);
+  }
+
+  resolveDojoWalls(f) {
+    if(!this.rules.hazards || this.stage.key!=='mishimadojo' || f.eliminated || f.state==='respawn') return;
+    const w=this.stage.mechanic.walls,gd=this.stage.ground,left=gd.x+18,right=gd.x+gd.w-18;
+    for(const [name,side,edge] of [['left',-1,left],['right',1,right]]) {
+      if(w[name].broken || (side<0 ? f.x>=edge : f.x<=edge) || f.y>gd.y+20) continue;
+      if(f.hitstun>0 && f.vx*side>=20) { this.breakDojoWall(name); continue; }
+      f.x=edge; if(f.vx*side>0) f.vx=f.hitstun>0 ? -f.vx*.25 : 0;
+    }
+    if(!w.roof.broken && f.y-100*f.scale<-500 && f.x>=left && f.x<=right) {
+      if(f.hitstun>0 && f.vy < -20) this.breakDojoWall('roof');
+      else {f.y=-500+100*f.scale;if(f.vy<0)f.vy=f.hitstun>0 ? -f.vy*.25 : 0;}
+    }
+  }
+
   sameTeam(a, b) {
     if (!this.rules.teams || !a || !b) return false;
     if (a === b) return true;
@@ -249,16 +296,68 @@ class Match {
     if (this.paused) { this.cam.update(this.fighters); return; }
     this.time += 16.67;
 
-    // moving platforms — and how far they travelled this tick, which is what a
-    // fighter or an item standing on one inherits (see Fighter.applyPhysics)
+    // The stadium alternates its normal form with each transformed form.
+    if (this.stage.stageForms) {
+      const slot=this.rules.hazards ? Math.floor(this.frame/1800)%(this.stage.stageForms.length*2) : 0;
+      this.stage.form=slot%2 ? this.stage.stageForms[(slot-1)/2] : 'normal';
+    }
+
+    // Platform positions are updated before fighter physics. Stable platform
+    // identities let riders inherit motion even through layout transitions.
     for (const p of this.stage.platforms) {
-      if (p.move) {
-        const off = Math.sin(this.frame * p.move.speed + p.phase) * p.move.amp;
-        const cx0 = p.cx, cy0 = p.cy;
-        if (p.move.axis === 'x') p.cx = p.baseX + off; else p.cy = p.baseY - Math.abs(off) * 0.5 - off * 0.5;
-        p.x = p.cx; p.y = p.cy;
-        p.dx = p.cx - cx0; p.dy = p.cy - cy0;
-      } else { p.dx = 0; p.dy = 0; }
+      const x0=p.cx, y0=p.cy, wasActive=p.active !== false;
+      const m=p.motion;
+      let x=(m || p.move) ? p.baseX : (p.cx ?? p.x);
+      let y=(m || p.move) ? p.baseY : (p.cy ?? p.y);
+      let active=!p.broken && !(p.breakHP && !this.rules.hazards);
+      p.warning=false;
+      if (m && !(m.hazardMotion && !this.rules.hazards)) {
+        if (m.kind==='sine') {
+          const wave=Math.sin(this.frame*m.speed+(m.phase||0));
+          x+=m.ax*wave; y+=m.ay*wave;
+        } else if (m.kind==='fountain') {
+          const t=this.frame;
+          y+=m.amp*Math.sin(t*m.speed+(m.phase||0)+.35*Math.sin(t*.0017));
+          active=y<this.stage.ground.y-6;
+        } else if (m.kind==='split') {
+          const drift=160*Math.sin(this.frame*.004);
+          const gap=120*Math.max(0,Math.sin(this.frame*.0015));
+          x+=drift+m.side*gap;
+        } else if (m.kind==='blink') {
+          const t=this.frame%1200;
+          active=!(m.slot===0 ? t>=600&&t<720 : t>=900&&t<1020);
+          p.warning=m.slot===0 ? t>=540&&t<600 : t>=840&&t<900;
+        } else if (m.kind==='forms') {
+          active=m.forms.includes(this.stage.form);
+        } else if (m.kind==='cloud') {
+          x+=630*Math.sin(this.frame*.0025);
+        } else if (m.kind==='sketch') {
+          // Swapping silhouettes are one-way platforms, not solid walls.
+          active=Math.floor(this.frame/900)%2===m.group;
+        } else if (m.kind==='town') {
+          const t=this.frame%3600, slot=m.slot, isTown=slot<3;
+          let visible, shift;
+          if (t<900) { visible=isTown; shift=0; }
+          else if (t<1350) { visible=isTown; shift=(t-900)/450; }
+          else if (t<1800) { visible=!isTown; shift=1-(t-1350)/450; }
+          else if (t<2700) { visible=!isTown; shift=0; }
+          else if (t<3150) { visible=!isTown; shift=(t-2700)/450; }
+          else { visible=isTown; shift=1-(t-3150)/450; }
+          const direction=(slot===0||slot===3)?-1:1;
+          x+=direction*1500*shift; active=visible && x>-1200 && x<1200;
+        }
+      } else if (m && m.kind==='cloud') {
+        active=false;
+      } else if (m && m.kind==='sketch') {
+        active=m.group===0;
+      } else if (p.move) {
+        const off=Math.sin(this.frame*p.move.speed+p.phase)*p.move.amp;
+        if (p.move.axis==='x') x+=off; else y-=Math.abs(off)*.5+off*.5;
+      }
+      p.cx=p.x=x; p.cy=p.y=y; p.active=active;
+      // No huge carry on the tick a platform enters or leaves the scene.
+      p.dx=active && wasActive ? x-x0 : 0;
+      p.dy=active && wasActive ? y-y0 : 0;
     }
 
     // resolve active grabs every frame (even during intro)
@@ -361,6 +460,8 @@ class Match {
 
     // resolve fighter overlap (soft, state-weighted push)
     this.separateFighters();
+    if (this.stage.ringWalls) for (const f of this.fighters) this.resolveRingWall(f);
+    if (this.stage.key==='mishimadojo' && this.rules.hazards) for (const f of this.fighters) this.resolveDojoWalls(f);
 
     // projectiles / mines / summons
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -452,8 +553,49 @@ class Match {
 
   updateHazards() {
     if (!this.rules.hazards) return;
+    this.updateStageMechanics();
+    // Static, visible floor obstacles use the same shared hazard cooldown as
+    // other stage hazards, and never hit invulnerable or respawning fighters.
+    for (const spike of this.stage.floorSpikes || []) for (const f of this.fighters) {
+      if (f.eliminated || f.state==='respawn' || f.invincible || f.hazardCD>0 || !aabb(f.hurtbox,spike)) continue;
+      f.hazardCD=HAZARD_REHIT;
+      this.hitFighter(null,f,{damage:9,bkb:25,kbs:10,angle:90,hazard:1});
+      this.fx.hitSpark(f.x,spike.y,'#ffbc61',0.7,0);
+    }
+    // Stadium 2's floor effects are tied to its current authoritative form.
+    if (this.stage.form === 'electric') {
+      for (const f of this.fighters) if (!f.eliminated && f.state!=='respawn' && f.onGround && !f.onPlatform && Math.abs(f.x)>120)
+        f.x += f.x<0 ? -1.2 : 1.2;
+    } else if (this.stage.form === 'flying') {
+      const gd=this.stage.ground;
+      for (const f of this.fighters) if (!f.eliminated && f.state!=='respawn' && !f.onGround && f.x>gd.x && f.x<gd.x+gd.w && f.y<gd.y)
+        if (f.vy>-6) f.vy=Math.max(-6,f.vy-.32);
+    }
     const hz = this.stage.hazard;
     if (!hz) return;
+    if (hz.type === 'wind') {
+      const cycle=this.frame%hz.period;
+      if (cycle < hz.duration) {
+        const direction=Math.floor(this.frame/hz.period)%2 ? -1 : 1;
+        const envelope=Math.min(1,cycle/45,(hz.duration-cycle)/45);
+        for (const f of this.fighters) if (!f.eliminated && f.state!=='respawn') {
+          f.vx+=direction*hz.strength*envelope;
+          // Ground traction cancels small velocities before integration; apply
+          // a positional drift as well so stationary fighters feel the gust.
+          if (f.onGround) f.x+=direction*hz.strength*5*envelope;
+        }
+      }
+    }
+    if (hz.type === 'acid') {
+      const phase=(this.frame%hz.period)/hz.period;
+      const rise=(1-Math.cos(phase*Math.PI*2))*.5;
+      hz.y=hz.bottom+(hz.top-hz.bottom)*rise;
+      for (const f of this.fighters) {
+        if (f.eliminated || f.y<hz.y || f.hazardCD>0) continue;
+        f.hazardCD=HAZARD_REHIT;
+        this.hitFighter(null,f,{damage:hz.dmg,bkb:24,kbs:10,angle:90,hazard:1});
+      }
+    }
     if (hz.type === 'lava') {
       for (const f of this.fighters) {
         if (f.eliminated) continue;
@@ -486,6 +628,75 @@ class Match {
           }
         }
         if (cyc % 6 === 0) this.fx.particle({ x: hz.x + rand(-hz.w / 2, hz.w / 2), y: -10, vx: 0, vy: -6, life: 20, size: rand(3, 7), color: '#2fd6bb', grav: 0, drag: 1, shape: 'spark' });
+      }
+    }
+  }
+
+  // Distinct stage mechanics. All state lives on this Match, and the visuals
+  // consume this same state rather than inventing their own hitboxes.
+  updateStageMechanics() {
+    const stage=this.stage, state=stage.mechanic, gd=stage.ground, t=this.frame;
+    if (stage.key==='mishimadojo') {
+      for (const [name,w] of Object.entries(state.walls)) if (w.broken>0) {
+        w.broken--;
+        if (!w.broken && this.fighters.some(f=>!f.eliminated && f.state!=='respawn' &&
+            (name==='left' ? f.x<gd.x+18 : name==='right' ? f.x>gd.x+gd.w-18 : f.y-100*f.scale < -500))) w.broken=1;
+      }
+    }
+    if (stage.key==='tortimerisland' && t%720===360 && !this.items.some(it=>it.stageFruit && !it.dead)) {
+      const item=this.spawnItem('food', (Math.floor(t/720)%2 ? 650:-650), -260, 0, 1);
+      item.stageFruit=true;
+    }
+    if(stage.key==='flatzonex') {
+      const cycle=t%1200;
+      state.oil=cycle>=600 && cycle<1020 ? {x:Math.floor(t/1200)%2?240:-240,w:180} : null;
+    }
+    if(stage.key==='greatcave') {
+      for(const f of this.fighters) {
+        if(f.eliminated || f.state==='respawn' || f.invincible || f.hazardCD>0 || f.y < gd.y-42 || f.y>gd.y+20) continue;
+        if(Math.abs(Math.abs(f.x)-620)>70) continue;
+        f.hazardCD=HAZARD_REHIT;
+        if(f.damage>=100) this.koFighter(f,f.lastHitBy);
+        else this.hitFighter(null,f,{damage:15,bkb:24,kbs:8,angle:90,hazard:1});
+      }
+    }
+    if(stage.key==='brinstar' || stage.key==='foundry' || stage.key==='finaldestination') {
+      const meteor=stage.key!=='finaldestination',period=meteor?900:1050,start=meteor?560:700,impact=start+90;
+      const cycle=t%period, positions=meteor?[-350,0,350]:[-280,280,0], x=positions[Math.floor(t/period)%positions.length];
+      state.strike=cycle>=start && cycle<impact+30 ? {type:meteor?'meteor':'beam',x,phase:cycle-start,impact:90} : null;
+      if(cycle===impact) {this.aoeHit(null,x,gd.y,meteor?135:100,meteor?16:13,32,20,90,{hazard:1});this.fx.explode(x,gd.y,meteor?135:100,meteor?'#ff843b':'#a6f6ff');this.cam.shake(7);}
+    }
+    if(stage.key==='wreckingcrew') {
+      const bomb=state.bomb || (state.bomb={x:0,y:gd.y-22,fuse:0,respawn:0});
+      if(bomb.respawn>0) bomb.respawn--;
+      else if(bomb.fuse>0 && --bomb.fuse===0) {
+        this.aoeHit(null,bomb.x,gd.y,160,14,26,18,75,{hazard:1});this.fx.explode(bomb.x,gd.y,125,'#ffb24a');
+        // One scaffold collapses; riders fall naturally through it.
+        const p=stage.platforms[2]; if(p){p.broken=true;p.active=false;}
+        bomb.respawn=720;
+      }
+    }
+    if(stage.key==='midgar') {
+      if(!state.materia && !state.summon && t%900===450) state.materia={x:0,y:-130,life:450};
+      if(state.materia) {
+        const orb=state.materia;orb.life--;
+        const f=this.fighters.find(q=>!q.eliminated && q.state!=='respawn' && Math.hypot(q.x-orb.x,q.y-50-orb.y)<65);
+        if(f){
+          const others=this.fighters.filter(q=>q!==f && !q.eliminated && !this.sameTeam(f,q));
+          state.summon={owner:f.id,kind:['fire','bolt','beam'][Math.floor(t/900)%3],x:others.length?clamp(others[0].x,gd.x+80,gd.x+gd.w-80):0,t:0};
+          state.materia=null;this.fx.ring(orb.x,orb.y,'#74ffc3',70,24);
+        } else if(orb.life<=0) state.materia=null;
+      }
+      if(state.summon) {
+        const summon=state.summon,owner=this.fighters.find(f=>f.id===summon.owner);summon.t++;
+        if(summon.t===90) {
+          if(summon.kind==='bolt') {
+            for(const f of this.fighters) if(f!==owner && !f.eliminated && !this.sameTeam(owner,f) && f.onPlatform && !f.invincible)
+              this.hitFighter(owner,f,{damage:14,bkb:25,kbs:15,angle:90,hazard:1});
+          } else this.aoeHit(owner,summon.x,gd.y,summon.kind==='fire'?210:120,summon.kind==='fire'?16:20,36,22,90,{hazard:1});
+          this.fx.explode(summon.x,gd.y,150,summon.kind==='fire'?'#ff8340':'#a7ffff');this.cam.shake(8);
+        }
+        if(summon.t>125) state.summon=null;
       }
     }
   }
@@ -727,6 +938,33 @@ class Match {
 
   itemsHitByAttack(f, box, dmg) {
     this.hitTargets(box, f, dmg);
+    if(this.rules.hazards && f && f.action && Number.isFinite(dmg) && dmg>0) {
+      const state=this.stage.mechanic,gd=this.stage.ground;
+      if(this.stage.key==='mishimadojo') {
+        const areas={left:{x:gd.x-15,y:-500,w:60,h:500},right:{x:gd.x+gd.w-45,y:-500,w:60,h:500},roof:{x:gd.x,y:-525,w:gd.w,h:45}};
+        if(!f.action.dojoHits) f.action.dojoHits=new Set();
+        for(const [name,area] of Object.entries(areas)) {
+          const wall=state.walls[name];
+          if(!wall.broken && !f.action.dojoHits.has(name) && aabb(box,area)) {
+            f.action.dojoHits.add(name);wall.hp-=dmg;if(wall.hp<=0)this.breakDojoWall(name);
+          }
+        }
+      }
+      const bomb=state.bomb;
+      if(this.stage.key==='wreckingcrew' && bomb && !bomb.respawn && !bomb.fuse && aabb(box,{x:bomb.x-28,y:bomb.y-28,w:56,h:56})) bomb.fuse=60;
+    }
+    // Obstacles are one-way block platforms: one damage application per
+    // fighter action, not once per active hitbox frame.
+    if (this.rules.hazards && f && f.action && Number.isFinite(dmg) && dmg>0) {
+      for (const p of this.stage.platforms) {
+        if (!p.breakHP || p.broken || p.active===false || !aabb(box,{x:p.x,y:p.y,w:p.w,h:p.h})) continue;
+        if (!p.hitActions) p.hitActions=new WeakSet();
+        if (p.hitActions.has(f.action)) continue;
+        p.hitActions.add(f.action); p.breakHP-=dmg;
+        this.fx.hitSpark(p.x+p.w/2,p.y,'#d8b980',.4,0);
+        if (p.breakHP<=0) {p.broken=true;p.active=false;this.fx.burst(p.x+p.w/2,p.y,'#b88b55',12);}
+      }
+    }
     for (const it of this.items) {
       if (it.dead || it.heldBy) continue;
       if (aabb(box, it.box)) {

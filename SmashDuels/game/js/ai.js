@@ -48,6 +48,16 @@ class CPU {
 
     // ---- offstage recovery is handled every frame (high priority)
     const gd = match.stage.ground;
+    const gap = (match.stage.groundGaps || []).find(g => f.x>g.x && f.x<g.x+g.w);
+    // When below a floor opening, recover up through the opening instead of
+    // steering into the underside of a slab.
+    if (gap && f.y>gd.y-20 && !f.eliminated && f.state!=='respawn') {
+      const center=gap.x+gap.w/2;
+      if (f.x<center-12) o.right=true; else if (f.x>center+12) o.left=true;
+      if (f.vy>0 && f.airJumpsLeft>0) { o.jump=true; this.press.jump=2; }
+      else if (f.vy>3 && !f.usedUpB) { o.up=true; o.special=true; this.press.special=3; }
+      return o;
+    }
     const onStage = f.x > gd.x - 40 && f.x < gd.x + gd.w + 40 && f.y < gd.y + 40;
     if (!onStage && f.state !== 'respawn' && !f.eliminated) {
       return this.recover(match);
@@ -123,6 +133,23 @@ class CPU {
       o[sb.x > f.x ? 'right' : 'left'] = true;
       if (sb.y < f.y - 60 && this.jumpCd === 0) { this.press.jump = 2; this.jumpCd = 30; }
       if (Math.abs(sb.x - f.x) < 60 && Math.abs(sb.y - (f.y - 60)) < 70 && this.attackCd === 0) { this.press.attack = 2; this.attackCd = 10; }
+    }
+    // Jump when walking toward a nearby opening rather than blindly running in.
+    if (f.onGround && !f.onPlatform && !f.hitstun && this.jumpCd===0) {
+      for (const gap of match.stage.groundGaps || []) {
+        if ((o.right && f.x<=gap.x && gap.x-f.x<65) || (o.left && f.x>=gap.x+gap.w && f.x-gap.x-gap.w<65)) {
+          o.jump=true;this.press.jump=2;this.jumpCd=40;break;
+        }
+      }
+    }
+    // Treat active spikes as a low obstacle to jump rather than camping on.
+    if (match.rules.hazards && f.onGround && !f.onPlatform && !f.hitstun && this.jumpCd===0) {
+      for (const spike of match.stage.floorSpikes || []) {
+        if ((o.right && f.x<spike.x && spike.x-f.x<70) ||
+            (o.left && f.x>spike.x+spike.w && f.x-spike.x-spike.w<70)) {
+          o.jump=true;this.press.jump=2;this.jumpCd=40;break;
+        }
+      }
     }
     // Final smash once possessed
     if (f.hasSmashBall && f.onGround && f.canAct()) { this.press.special = 2; }
