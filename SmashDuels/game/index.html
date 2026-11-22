@@ -8,11 +8,12 @@
 <link rel="stylesheet" href="css/ui-refresh.css?v=K52">
 <link rel="stylesheet" href="css/ui-fx.css?v=K52">
 <link rel="stylesheet" href="css/fighter-profiles.css?v=K52">
-<link rel="stylesheet" href="css/online.css?v=2">
+<link rel="stylesheet" href="css/online.css?v=3">
 </head>
 <body>
 <div id="app">
   <canvas id="game-canvas"></canvas>
+  <div id="online-notice" role="status" aria-live="polite" hidden></div>
 
   <!-- ================= MATCH HUD ================= -->
   <div id="hud">
@@ -23,7 +24,7 @@
     <div id="hud-slots"></div>
     <div id="pause-overlay">
       <div class="pause-card">
-        <div class="pause-kicker">MATCH INTERRUPTED / TAKE YOUR TIME</div><h2>PAUSED<span>.</span></h2>
+        <div class="pause-kicker" id="pause-kicker">MATCH INTERRUPTED / TAKE YOUR TIME</div><h2 id="pause-title">PAUSED<span>.</span></h2>
         <button class="mbtn primary" id="btn-resume">RESUME<small>back to the fight</small></button>
         <button class="mbtn" id="btn-restart">RESTART<small>same fighters & rules</small></button>
         <button class="mbtn" id="btn-pause-settings">SETTINGS<small>music & sound</small></button>
@@ -249,6 +250,7 @@
       <div class="res-table" id="res-table"></div>
       <div class="res-challenges" id="res-challenges"></div>
       <div class="res-actions">
+        <button class="pill gold" id="btn-results-room" hidden>RETURN TO ROOM</button>
         <button class="pill gold" id="btn-results-again">REMATCH</button>
         <button class="pill" id="btn-results-char">CHARACTERS</button>
         <button class="pill" id="btn-results-menu">TITLE</button>
@@ -313,7 +315,7 @@
 <script src="js/match.js?v=K52"></script>
 <script src="js/modes.js?v=K52"></script>
 <script src="js/cloud.js?v=K52"></script>
-<script src="js/online.js?v=2"></script>
-<script src="js/ui.js?v=K53"></script>
+<script src="js/online.js?v=3"></script>
+<script src="js/ui.js?v=K54"></script>
 </body>
 </html>
