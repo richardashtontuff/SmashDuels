@@ -17,7 +17,19 @@ async function main(){
  b.send({type:'stage',key:'field'});b.send({type:'start'});await new Promise(r=>setTimeout(r,60));assert(!b.q.some(x=>x.type==='start'));
  a.send({type:'stage',key:'field'});await b.wait('room',x=>x.stage==='field');a.send({type:'start'});let start=await b.wait('start');assert.equal(start.stage,'field');assert.equal(start.cast.length,4);assert.equal(start.cast[1].key,'briar');assert.equal(start.cast[1].palIdx,3);
  let before=await b.wait('snapshot');assert.equal(before.data.fighters.length,4);a.send({type:'input',mask:2});await new Promise(r=>setTimeout(r,2200));let after=await b.wait('snapshot',x=>x.data.frame>115);assert(after.data.fighters[0].x>before.data.fighters[0].x,'remote movement should be simulated by server');
- a.ws.close();await b.wait('ended');
+ // Finish a real simulated match, return to the same room, and rematch.
+ app.rooms.get(code).match.endMatch();
+ await b.wait('room',x=>x.phase==='results');
+ a.send({type:'return_room'});b.send({type:'return_room'});
+ await a.wait('room',x=>x.phase==='lobby'&&x.code===code&&x.players.length===4&&x.players.filter(p=>p.inLobby).length===2);
+ a.send({type:'start'});await new Promise(r=>setTimeout(r,100));assert.equal(app.rooms.get(code).phase,'lobby','cannot start while players are viewing results');
+ c.send({type:'return_room'});d.send({type:'return_room'});
+ await a.wait('room',x=>x.phase==='lobby'&&x.players.every(p=>p.inLobby));
+ a.send({type:'start'});start=await b.wait('start');assert.equal(start.cast.length,4);
+ // A guest leaving mid-round returns the rest to the room, but the host closes it.
+ d.send({type:'leave'});assert.match((await a.wait('round_aborted')).message,/Player 4 left/);
+ await b.wait('room',x=>x.phase==='lobby'&&x.code===code&&x.players.length===3);
+ a.ws.close();assert.match((await b.wait('ended')).message,/host disconnected.*closed/i);
  b.send({type:'queue'});await b.wait('waiting');c.send({type:'queue'});await b.wait('room',x=>x.mode==='queue'&&x.players.length===2);await c.wait('room',x=>x.mode==='queue'&&x.players.length===2);
  b.send({type:'stage_preview',key:'field'});await c.wait('room',x=>x.players.some(p=>p.stageChoice==='field'&&!p.vote));
  b.send({type:'vote',key:'field'});await c.wait('room',x=>x.players.some(p=>p.vote==='field'));c.send({type:'vote',key:'field'});const selection=await b.wait('room',x=>x.phase==='select');assert.equal(selection.stage,'field');b.send({type:'character',key:'nomad'});await b.wait('room',x=>x.phase==='select'&&x.players.some(p=>p.id===x.id&&p.character==='nomad'));start=await b.wait('start');assert.equal(start.cast[0].key,'nomad');await b.wait('snapshot');c.ws.close();await b.wait('ended');

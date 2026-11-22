@@ -3,9 +3,13 @@
 'use strict';
 const Online = (() => {
   const keys=['left','right','up','down','attack','special','jump','shield','grab'];
-  let socket=null, room=null, playing=false, ready=false, timer=null, lastMask=-1;
+  let socket=null, room=null, playing=false, ready=false, timer=null, lastMask=-1, noticeTimer=null;
   const el=id=>document.getElementById('online-'+id);
   function status(text){el('status').textContent=text;}
+  function notice(message){
+    const box=el('notice');box.textContent=message;box.hidden=false;
+    clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{box.hidden=true;},5000);
+  }
   function send(msg){if(socket && socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify(msg));}
   const colors=['#ef3c43','#2688e9','#d6a51c','#35a669'];
   function setup(){
@@ -45,7 +49,7 @@ const Online = (() => {
   }
   function entry(){room=null;el('entry').hidden=false;el('room').hidden=true;document.querySelector('.online-shell').classList.remove('in-room');}
   function open(){setup();entry();status('Connect to play online.');UI.show('screen-online');}
-  function leave(){playing=false;room=null;lastMask=-1;if(timer){clearInterval(timer);timer=null;}if(socket){const old=socket;socket=null;old.close();}}
+  function leave(){playing=false;room=null;lastMask=-1;if(timer){clearInterval(timer);timer=null;}if(socket){send({type:'leave'});const old=socket;socket=null;old.close();}}
   function connect(first){
     if(socket)return;
     status('Connecting…');el('entry').hidden=true;el('room').hidden=false;document.querySelector('.online-shell').classList.add('in-room');el('room-info').textContent='CONNECTING…';el('players').replaceChildren();el('player-count').textContent='';el('fighter-section').hidden=el('stage-section').hidden=el('start').hidden=true;
@@ -53,18 +57,24 @@ const Online = (() => {
     const ws=new WebSocket(scheme+'//'+location.host+'/online');socket=ws;
     ws.onopen=()=>{if(socket===ws)send(first);};
     ws.onmessage=e=>{if(socket!==ws)return;let msg;try{msg=JSON.parse(e.data)}catch{return;}receive(msg);};
-    ws.onclose=()=>{if(socket!==ws)return;socket=null;if(playing){playing=false;Game.quitToMenu();UI.show('screen-online');}entry();status('Disconnected from the online server.');};
+    ws.onclose=()=>{if(socket!==ws)return;socket=null;if(playing){playing=false;Game.stopMatchView();UI.show('screen-online');}entry();status('Disconnected from the online server.');notice('Disconnected from the online server.');};
     ws.onerror=()=>status('Could not connect to the online server.');
   }
   function receive(msg){
     if(msg.type==='waiting'){el('room-info').textContent='SEARCHING FOR A RIVAL…';status('Waiting for another player.');return;}
-    if(msg.type==='error'){leave();entry();status(msg.message);return;}
-    if(msg.type==='ended'){const wasPlaying=playing;leave();if(wasPlaying){Game.quitToMenu();UI.show('screen-online');}entry();status(msg.message);return;}
+    if(msg.type==='error'){leave();entry();status(msg.message);notice(msg.message);return;}
+    if(msg.type==='notice'){notice(msg.message);return;}
+    if(msg.type==='round_aborted'){playing=false;lastMask=-1;Game.stopMatchView();UI.show('screen-online');notice(msg.message);return;}
+    if(msg.type==='ended'){const wasPlaying=playing;leave();if(wasPlaying){Game.stopMatchView();UI.show('screen-online');}entry();status(msg.message);notice(msg.message);return;}
     if(msg.type==='room'){room=msg;renderRoom();return;}
     if(msg.type==='start'){
       playing=true;lastMask=-1;Game.startMatch({rules:Object.assign({},DEFAULT_RULES,msg.rules),cast:msg.cast,stageKey:msg.stage});return;
     }
     if(msg.type==='snapshot' && playing)apply(msg.data);
+  }
+  function returnToRoom(){
+    if(!playing || !room || room.mode!=='private' || !socket || socket.readyState!==WebSocket.OPEN)return;
+    send({type:'return_room'});playing=false;lastMask=-1;Game.stopMatchView();UI.show('screen-online');renderRoom();
   }
   function playerBadge(index,text){const badge=document.createElement('span');badge.className='online-player-badge';badge.style.setProperty('--player-color',colors[index]);badge.textContent=text||'P'+(index+1);return badge;}
   function renderRoom(){
@@ -76,7 +86,7 @@ const Online = (() => {
     el('player-count').textContent=`${room.players.length} / ${queue?2:4} PLAYERS`;
     const slots=[];for(let i=0;i<(queue?2:4);i++){
       const p=room.players[i], card=document.createElement('div');card.className='online-player-slot'+(p?'':' empty')+(p&&p.id===room.id?' is-you':'');card.style.setProperty('--player-color',colors[i]);
-      if(p){const f=FIGHTERS[p.character],pal=f.palettes[p.palIdx];card.innerHTML=`<div class="online-slot-head"><span>P${i+1}${p.id===room.id?' / YOU':''}</span><span>${!queue&&p.id===room.host?'★ HOST':queue&&voting&&p.vote?'✓ LOCKED':'● CONNECTED'}</span></div><img src="assets/portraits/${p.character}_base.png?v=${BUILD}" alt=""><div class="online-slot-name"><strong>${f.name}</strong><small><i class="online-palette-chip" style="background:${pal.primary};border-color:${pal.accent}"></i> ${pal.name}</small></div>`;}
+      if(p){const f=FIGHTERS[p.character],pal=f.palettes[p.palIdx];card.innerHTML=`<div class="online-slot-head"><span>P${i+1}${p.id===room.id?' / YOU':''}</span><span>${!queue&&!p.inLobby?'⏳ RESULTS':!queue&&p.id===room.host?'★ HOST':queue&&voting&&p.vote?'✓ LOCKED':'● CONNECTED'}</span></div><img src="assets/portraits/${p.character}_base.png?v=${BUILD}" alt=""><div class="online-slot-name"><strong>${f.name}</strong><small><i class="online-palette-chip" style="background:${pal.primary};border-color:${pal.accent}"></i> ${pal.name}</small></div>`;}
       else card.innerHTML=`<div class="online-slot-head"><span>P${i+1}</span><span>OPEN SLOT</span></div><div class="online-slot-empty">+</div><div class="online-slot-name"><strong>AWAITING PLAYER</strong><small>Share the room code</small></div>`;
       slots.push(card);
     }el('players').replaceChildren(...slots);
@@ -104,13 +114,13 @@ const Online = (() => {
     drawStage(el('selected-stage'),STAGES[voting?(me.stageChoice||'skyshrine'):room.stage]);
     el('stage-current').textContent=voting?`YOUR VOTE: ${STAGES[me.stageChoice||'skyshrine'].name}${me.vote?' · LOCKED':''}`:`SELECTED ARENA: ${STAGES[room.stage].name}`;
     el('vote').hidden=!voting;el('vote').disabled=!!me.vote;el('vote').textContent=me.vote?'STAGE LOCKED ✓':'LOCK IN STAGE ▶';
-    el('start').hidden=!(lobby&&host);el('start').disabled=room.players.length<2;
+    el('start').hidden=!(lobby&&host);el('start').disabled=room.players.length<2 || !room.players.every(p=>p.inLobby);
     if(timer)clearInterval(timer);
-    const update=()=>{if(!room)return;if(select)status(`Choose your fighter — ${Math.max(0,Math.ceil((room.deadline-Date.now())/1000))}s remaining`);else if(voting)status('Choose an arena and lock in. If votes differ, one is picked at random.');else if(lobby)status(host?'Choose an arena and start when at least two players have joined.':'Choose your fighter. Waiting for the host to start.');};
+    const update=()=>{if(!room)return;if(select)status(`Choose your fighter — ${Math.max(0,Math.ceil((room.deadline-Date.now())/1000))}s remaining`);else if(voting)status('Choose an arena and lock in. If votes differ, one is picked at random.');else if(lobby)status(!room.players.every(p=>p.inLobby)?'Waiting for players to return from results.':host?'Choose an arena and start when at least two players have joined.':'Choose your fighter. Waiting for the host to start.');else if(room.phase==='results')status('Round complete. Returning to the room…');};
     update();if(select)timer=setInterval(update,200);
   }
-  function tick(m){
-    const input=m.readPlayerInput(m.fighters[0]);let mask=0;keys.forEach((k,i)=>{if(input[k])mask|=1<<i;});
+  function tick(m,blocked){
+    const input=blocked?{}:m.readPlayerInput(m.fighters[0]);let mask=0;keys.forEach((k,i)=>{if(input[k])mask|=1<<i;});
     if(mask!==lastMask){send({type:'input',mask});lastMask=mask;}
   }
   function apply(s){
@@ -124,5 +134,5 @@ const Online = (() => {
     Object.assign(m.fx,s.fx);
     if(s.winner)m.winner=s.winner.map(i=>m.fighters[i]);
   }
-  return {open,leave,tick,get playing(){return playing;}};
+  return {open,leave,tick,returnToRoom,get playing(){return playing;},get canReturn(){return playing && room && room.mode==='private';}};
 })();
