@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
 <title>RIFT RUMBLE — a platform fighter</title>
-<link rel="stylesheet" href="css/style.css?v=K32">
-<link rel="stylesheet" href="css/ui-refresh.css?v=K32">
-<link rel="stylesheet" href="css/ui-fx.css?v=K32">
+<link rel="stylesheet" href="css/style.css?v=K40">
+<link rel="stylesheet" href="css/ui-refresh.css?v=K40">
+<link rel="stylesheet" href="css/ui-fx.css?v=K40">
+<link rel="stylesheet" href="css/fighter-profiles.css?v=K40">
 </head>
 <body>
 <div id="app">
@@ -52,7 +53,7 @@
           <div class="mode-preview" aria-live="polite"><span class="mode-preview-index">01 / BATTLE</span><span class="mode-preview-copy">A CUSTOM BATTLE FOR UP TO FOUR FIGHTERS</span><span class="mode-preview-mark" aria-hidden="true">◆</span></div>
           <div class="home-utility"><button class="home-link" id="btn-records">RECORDS <span>↗</span></button><button class="home-link" id="btn-help">HOW TO PLAY <span>↗</span></button><button class="home-link" id="btn-settings">SETTINGS <span>↗</span></button></div>
         </div>
-        <div class="home-art" aria-hidden="true"><div class="home-art-label">SIX FIGHTERS <span> / ONE RIFT</span></div><div class="home-art-number">06</div><img class="home-fighter home-fighter-back" src="assets/portraits/vesper_base.png?v=K32" alt=""><img class="home-fighter home-fighter-front" src="assets/portraits/valor_base.png?v=K32" alt=""><div class="home-art-caption">EVERY FIGHT<br><strong>STARTS HERE.</strong></div></div>
+        <div class="home-art" aria-hidden="true"><div class="home-art-label">SEVEN FIGHTERS <span> / ONE RIFT</span></div><div class="home-art-number">07</div><img class="home-fighter home-fighter-back" src="assets/portraits/vesper_base.png?v=K40" alt=""><img class="home-fighter home-fighter-front" src="assets/portraits/valor_base.png?v=K40" alt=""><div class="home-art-caption">EVERY FIGHT<br><strong>STARTS HERE.</strong></div></div>
       </div>
       <div class="home-footer"><span>LOCAL BATTLE / 1–4 PLAYERS</span><span>KEYBOARD + GAMEPAD SUPPORTED</span></div>
     </div>
@@ -70,35 +71,60 @@
     </div>
     <div class="layout">
       <div class="panel left-panel">
+        <div class="roster-heading"><span>01 / CHOOSE YOUR FIGHTER</span><span>THE RIFT AWAITS <b>✦</b></span></div>
         <div class="slot-tabs" id="slot-tabs"></div>
         <div class="fighter-grid" id="fighter-grid"></div>
+        <section class="fighter-profile" id="fighter-profile" aria-label="Fighter profile">
+          <div class="profile-scene" aria-hidden="true">
+            <div class="profile-scene-label"><span>FIGHTER PROFILE</span><span id="profile-number">01 / 07</span></div>
+            <div class="profile-scene-title"><small>THEIR WORLD</small><strong id="profile-vibe"></strong></div>
+          </div>
+          <div class="profile-stats">
+            <div class="profile-stats-head"><div><span class="profile-eyebrow">KNOW YOUR FIGHTER</span><h3>STATS</h3></div><span class="profile-relative">VS ROSTER BEST</span></div>
+            <div id="profile-stat-bars" class="profile-stat-bars"></div>
+            <p class="profile-note">Weight reduces knockback · F-smash is base damage.</p>
+          </div>
+        </section>
       </div>
       <div class="panel right-panel">
-        <div class="hero-top">
-          <div class="hero-player" id="hero-player">P1 / PLAYER SELECT</div>
-          <img id="hero-portrait" class="hero-portrait" alt="">
-          <div class="hero-names">
-            <h2 id="hero-name">VALOR</h2>
-            <div class="ttl" id="hero-title">THE SWORDSMAN</div>
-            <div class="arch" id="hero-arch">All-Rounder</div>
+        <div class="select-showcase" id="select-showcase">
+          <div class="showcase-landscape" aria-hidden="true"></div>
+          <div class="showcase-atmosphere" aria-hidden="true"></div>
+          <div class="showcase-ring" aria-hidden="true"></div>
+          <div class="showcase-index" id="showcase-number" aria-hidden="true">01</div>
+          <div class="showcase-topline" aria-hidden="true"><span>RIFT RUMBLE / FIGHTER FILE</span><span>✦ SELECT YOUR LEGEND</span></div>
+          <div class="hero-top">
+            <div class="hero-player" id="hero-player">P1 / PLAYER SELECT</div>
+            <img id="hero-portrait" class="hero-portrait" alt="">
+            <div class="hero-names">
+              <div class="hero-kicker">READY TO RUMBLE <span> / </span> <span id="hero-number">01</span></div>
+              <h2 id="hero-name">VALOR</h2>
+              <div class="ttl" id="hero-title">THE RIFT BLADE</div>
+              <div class="arch" id="hero-arch">All-Rounder</div>
+            </div>
+          </div>
+          <p id="hero-description" class="hero-description"></p>
+        </div>
+        <div class="select-details">
+          <div class="loadout-heading"><span>02 / CUSTOMIZE YOUR FIGHTER</span><span>MOVE SET + STYLE</span></div>
+          <div class="loadout-row"><span class="loadout-label">COLOR</span><div class="pal-row" id="pal-row"></div></div>
+          <div class="loadout-row moves-row"><span class="loadout-label">MOVES</span><div class="movelist" id="hero-moves"></div></div>
+          <div class="rowline">
+            <button class="pill" id="cpu-toggle">CPU: ON</button>
+            <div class="cpu-level-wrap" id="cpu-level-wrap">
+              <label for="cpu-level">CPU LEVEL</label>
+              <input type="range" id="cpu-level" min="1" max="9" step="1" value="5">
+              <span id="cpu-level-val">5</span>
+            </div>
           </div>
         </div>
-        <p id="hero-description" class="hero-description"></p>
-        <div class="pal-row" id="pal-row"></div>
-        <div class="movelist" id="hero-moves"></div>
-        <div class="rowline">
-          <button class="pill" id="cpu-toggle">CPU: ON</button>
-          <div class="cpu-level-wrap" id="cpu-level-wrap">
-            <label>CPU LEVEL</label>
-            <input type="range" id="cpu-level" min="1" max="9" step="1" value="5">
-            <span id="cpu-level-val">5</span>
+        <div class="select-footer">
+          <div class="sel-summary" id="sel-summary"></div>
+          <div class="sel-actions">
+            <button class="pill" id="sel-rules">RULES</button>
+            <button class="pill" id="sel-stage">STAGE</button>
+            <button class="pill gold" id="sel-fight">FIGHT ▶</button>
           </div>
-        </div>
-        <div class="sel-summary" id="sel-summary"></div>
-        <div class="sel-actions">
-          <button class="pill" id="sel-rules">RULES</button>
-          <button class="pill" id="sel-stage">STAGE</button>
-          <button class="pill gold" id="sel-fight">FIGHT ▶</button>
         </div>
       </div>
     </div>
@@ -246,15 +272,15 @@
   </div>
 </div>
 
-<script src="js/core.js?v=K32"></script>
-<script src="js/data.js?v=K32"></script>
-<script src="js/render.js?v=K32"></script>
-<script src="js/fighter.js?v=K32"></script>
-<script src="js/items.js?v=K32"></script>
-<script src="js/ai.js?v=K32"></script>
-<script src="js/match.js?v=K32"></script>
-<script src="js/modes.js?v=K32"></script>
-<script src="js/cloud.js?v=K32"></script>
-<script src="js/ui.js?v=K32"></script>
+<script src="js/core.js?v=K40"></script>
+<script src="js/data.js?v=K40"></script>
+<script src="js/render.js?v=K40"></script>
+<script src="js/fighter.js?v=K40"></script>
+<script src="js/items.js?v=K40"></script>
+<script src="js/ai.js?v=K40"></script>
+<script src="js/match.js?v=K40"></script>
+<script src="js/modes.js?v=K40"></script>
+<script src="js/cloud.js?v=K40"></script>
+<script src="js/ui.js?v=K40"></script>
 </body>
 </html>

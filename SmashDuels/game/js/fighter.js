@@ -393,7 +393,8 @@ class Fighter {
           this.dashT = st.dashFrames;
           if (this.vx * h < -0.2) {
             this.turnT = SKID_FRAMES;
-            match.fx.dust(this.x - h * 8 * this.scale, this.y, 6, this.pal.accent);
+            if (this.key === 'tide') match.fx.waterSplash(this.x, this.y, .55, this.pal.accent);
+            else match.fx.dust(this.x - h * 8 * this.scale, this.y, 6, this.pal.accent);
             AUDIO.sfx('land', { power: 0.18 });
           } else {
             this.turnT = 0;
@@ -627,6 +628,7 @@ class Fighter {
     this.jumpsLeft = this.def.stats.jumps;
     this.fastfalled = false; this.usedUpB = false; this.usedAirDodge = false;
     this.ledge = null; this.ledgeInvuln = 0;
+    if (this.key === 'tide' && impact > 1) match.fx.waterSplash(this.x, this.y, clamp(impact / 10, .6, 1.5), this.pal.accent);
     // tech
     if (this.hitstun > 0 || this.techWindow > 0) {
       if (this.input.shield || this.input.shieldP) { this.startTech(match); return; }
@@ -656,7 +658,7 @@ class Fighter {
       this.actionT = 0;
     }
     if (impact > 4) {
-      match.fx.dust(this.x, this.y, Math.min(10, 2 + impact * 0.4), '#ffffff');
+      if (this.key !== 'tide') match.fx.dust(this.x, this.y, Math.min(10, 2 + impact * 0.4), '#ffffff');
       if (impact > 10) match.cam.shake(Math.min(6, impact * 0.3));
       AUDIO.sfx('land');
     }
@@ -857,11 +859,11 @@ class Fighter {
     // — overwriting `type` with 'special' made every special-type branch dead
     this.action = Object.assign({}, sp, { dur: sp.frames, kind: 'special', specialType: sp.type, type: 'special', specialKey: dir, poseType: 'special', specialDir: dir });
     this.actionT = 0; this.hitIds = new Map(); this.hitCount = new Map(); this.specPhase = 'startup';
-    this.charging = sp.type === 'soulreap'; this.chargeT = 0; this.forceRelease = false;
+    this.charging = sp.type === 'soulreap' || sp.type === 'tidewave'; this.chargeT = 0; this.forceRelease = false;
     if (sp.cooldown) this.cooldowns[dir] = sp.cooldown;
     this.specialData = { fired: 0, timer: 0, projFired: false, orbFired: false, dashFired: false, tpFired: false, lassoFired: false, riseHit: false, mineFired: false };
     if (dir === 'u') { this.usedUpB = true; this.fastfalled = false; }
-    AUDIO.sfx(sp.type === 'soulreap' ? 'shieldUp' : 'swing');
+    AUDIO.sfx((sp.type === 'soulreap' || sp.type === 'tidewave') ? 'shieldUp' : 'swing');
     return true;
   }
 
@@ -951,10 +953,9 @@ class Fighter {
   updateAction(match) {
     const a = this.action;
     if (!a) { this.state = 'idle'; return false; }
-    // Soul Reap holds the action clock before startup. Releasing G commits the
-    // stored power, even if G was buffered and released before the action began.
-    // Charge is capped but stays held until release; an interruption cancels it.
-    if (a.type === 'special' && a.specialType === 'soulreap' && this.charging) {
+    // Held neutral specials pause the action clock; releasing G commits the
+    // stored power/duration. A buffered tap still works and interruption cancels it.
+    if (a.type === 'special' && (a.specialType === 'soulreap' || a.specialType === 'tidewave') && this.charging) {
       if (this.input.special) {
         this.chargeT = Math.min(a.chargeFrames, this.chargeT + 1);
         this.actionT = 0;
@@ -967,8 +968,14 @@ class Fighter {
         return true;
       }
       const power = clamp(this.chargeT / a.chargeFrames, 0, 1);
-      a.chargeMultiplier = 1 + (a.chargeMax - 1) * power;
-      a.damage *= a.chargeMultiplier;
+      if (a.specialType === 'tidewave') {
+        // A tap still produces a visible wave. Longer holds yield two ticks
+        // of wave life per held tick, up to ten seconds at full charge.
+        a.waveLife = Math.max(a.minWaveLife, this.chargeT * a.waveLifeMultiplier);
+      } else {
+        a.chargeMultiplier = 1 + (a.chargeMax - 1) * power;
+        a.damage *= a.chargeMultiplier;
+      }
       this.charging = false;
       this.actionT = 0;
       if (a.cooldown) this.cooldowns.n = a.cooldown;
@@ -1122,6 +1129,17 @@ class Fighter {
     }
     switch (sp.specialKey) {
       case 'n': {
+        if (sp.type === 'tidewave' && t >= sp.startup && !s.projFired) {
+          s.projFired = true;
+          match.spawnProjectile({ owner:this, x:this.x + this.facing * 55 * this.scale, y:this.y,
+            vx:this.facing * sp.waveSpeed, vy:0, kind:'tidewave',
+            surface:this.onGround ? (this.onPlatform || match.stage.ground) : null,
+            life:sp.waveLife || sp.minWaveLife, fadeFrames:18, rehit:sp.rehit,
+            damage:sp.damage, bkb:sp.bkb, kbs:sp.kbs,
+            angle:this.facing < 0 ? 180-sp.angle : sp.angle, color:this.pal.accent });
+          match.fx.waterSplash(this.x, this.y, 1, this.pal.accent);
+          AUDIO.sfx('shoot');
+        }
         if (sp.type === 'soulreap' && t >= sp.startup && !s.projFired) {
           s.projFired = true;
           const power = clamp(((sp.chargeMultiplier || 1) - 1) / (sp.chargeMax - 1), 0, 1);
@@ -1207,17 +1225,22 @@ class Fighter {
       }
       case 'u': {
         if (sp.type === 'recover') {
+          // Tide's wave gathers and circles first. Slow a downward fall during
+          // that brief windup so the visual does not cost her the recovery.
+          if (this.key === 'tide' && t < sp.startup && !this.onGround) this.vy = Math.min(this.vy, 1);
           // rise during early frames
           if (t >= sp.startup && t < sp.startup + 20) {
             this.vy = -sp.rise * (1 - (t - sp.startup) / 26);
             this.vx = lerp(this.vx, this.horiz() * sp.drift + this.facing * sp.drift * 0.4, 0.25);
             this.hitstun = 0;
             if (t === sp.startup) {
-              match.fx.ring(this.x, this.y - 30, this.pal.accent, this.key === 'grim' ? 75 : 48, 15);
+              if (this.key !== 'tide') match.fx.ring(this.x, this.y - 30, this.pal.accent, this.key === 'grim' ? 75 : 48, 15);
               if (this.key === 'valor' || this.key === 'vesper') match.fx.arc(this.x, this.y - 60, -Math.PI / 2, this.pal.accent, 55, 13, this.facing);
               if (this.key === 'grim') match.fx.burst(this.x, this.y, this.pal.accent, 18, 5);
             }
-            if ((t - sp.startup) % 4 === 0) {
+            if (this.key === 'tide' && (t - sp.startup) % 4 === 0)
+              match.fx.waterSplash(this.x, this.y + 4 * this.scale, .55, this.pal.accent);
+            if (this.key !== 'tide' && (t - sp.startup) % 4 === 0) {
               match.fx.particle({ x: this.x + rand(-10, 10), y: this.y - 10, vx: rand(-1, 1), vy: rand(1, 3), life: 15, size: this.key === 'grim' ? 6 : 3, color: this.pal.accent, grav: 0, shape: this.key === 'grim' ? 'shard' : 'spark' });
               // A short energy line reads as Rook's drone assist, not a stage tether.
               if (this.key === 'rook') match.fx.lines.push({ x1: this.x, y1: this.y - 55, x2: this.x + this.facing * 18, y2: this.y - 135, color: this.pal.accent, w: 3, life: 5, t: 0 });
@@ -1234,7 +1257,7 @@ class Fighter {
             }
           } else if (sp.ascentCombo) {
             this.updateAscentCombo(match, sp, t, s);
-          } else if (t >= sp.startup + 2 && !s.riseHit) { s.riseHit = true;
+          } else if (!sp.hitboxes && t >= sp.startup + 2 && !s.riseHit) { s.riseHit = true;
             match.aoeHit(this, this.x, this.y - 70, 62, sp.damage, sp.bkb, sp.kbs, sp.angle);
             AUDIO.sfx('swing');
             match.fx.burst(this.x, this.y - 40, this.pal.accent, 14);

@@ -22,5 +22,9 @@
   "marrow": {
     "handX": 122.14,
     "handY": 8.06
+  },
+  "tide": {
+    "handX": 122.35,
+    "handY": 4.59
   }
 }

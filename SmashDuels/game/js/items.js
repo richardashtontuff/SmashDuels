@@ -3,6 +3,34 @@
    ============================================================ */
 'use strict';
 
+/* Stylized curling water: shared by Tide's ground wave and rising recovery.
+   Draw relative to a baseline, facing right; callers own transforms and alpha. */
+function drawWaterCrest(ctx, width, height, phase) {
+  ctx.save(); ctx.scale(width / 140 * (1 + .025 * Math.sin(phase * .19)),
+                        height / 90 * (1 + .035 * Math.sin(phase * .23)));
+  ctx.fillStyle = '#168bab'; ctx.strokeStyle = '#70ebf3'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-72, 0); ctx.quadraticCurveTo(-45, -9, -25, -34);
+  ctx.bezierCurveTo(-4, -62, 12, -87, 40, -83);
+  ctx.bezierCurveTo(63, -80, 73, -60, 62, -45);
+  ctx.bezierCurveTo(55, -35, 39, -35, 31, -43);
+  ctx.bezierCurveTo(48, -41, 51, -56, 39, -61);
+  ctx.bezierCurveTo(24, -66, 17, -45, 34, -27);
+  ctx.quadraticCurveTo(47, -10, 72, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#44cddd';
+  ctx.beginPath(); ctx.moveTo(-56,-3); ctx.quadraticCurveTo(-23,-18,-9,-44);
+  ctx.quadraticCurveTo(12,-78,36,-76); ctx.quadraticCurveTo(19,-64,18,-50);
+  ctx.quadraticCurveTo(10,-24,48,-3); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#e5ffff'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(2,-58); ctx.bezierCurveTo(18,-84,43,-88,57,-73);
+  ctx.bezierCurveTo(67,-62,60,-48,48,-47); ctx.stroke();
+  ctx.lineWidth = 2.5; ctx.globalAlpha *= .9;
+  ctx.beginPath(); ctx.moveTo(-48,-7); ctx.quadraticCurveTo(-18,-12,0,-38); ctx.stroke();
+  ctx.fillStyle = '#e8ffff';
+  for (let i=0;i<3;i++) { const x=-38+i*30+Math.sin(phase*.22+i)*4;
+    ctx.beginPath();ctx.arc(x,-6-(i%2)*4,2.5,0,TAU);ctx.fill(); }
+  ctx.restore();
+}
+
 /* ---------------- FX ---------------- */
 class FXSystem {
   constructor(match) { this.match = match; this.parts = []; this.texts = []; this.rings = []; this.arcs = []; this.lines = []; }
@@ -22,6 +50,17 @@ class FXSystem {
         life: randInt(16, 34), size: rand(2.5, 6.5), color,
         grav: 0.06, drag: 0.94, shape: 'smoke',
       });
+    }
+  }
+  waterSplash(x, y, power = 1, color = '#48d7df') {
+    // Droplets arc out of the landing point rather than lingering as smoke.
+    const n = Math.round(8 * power) + 3;
+    for (let i = 0; i < n; i++) {
+      const dir = i % 2 ? 1 : -1;
+      this.particle({x:x + dir * rand(2, 14), y:y - rand(0, 4),
+        vx:dir * rand(.8, 3.6) * power, vy:-rand(2.2, 5.8) * power,
+        life:randInt(16, 29), size:rand(2, 4.5) * power,
+        color:i % 3 ? color : '#e8ffff', grav:.24, drag:.98, shape:'droplet'});
     }
   }
   burst(x, y, color, n = 14, spd = 5) {
@@ -142,6 +181,10 @@ class FXSystem {
           const a = Math.atan2(p.vy, p.vx);
           ctx.rotate(a); ctx.fillRect(-p.size * 2.2, -p.size * 0.4, p.size * 4.4, p.size * 0.8);
           ctx.restore(); break;
+        }
+        case 'droplet': {
+          ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(p.vy,p.vx)+Math.PI/2);
+          ctx.beginPath();ctx.ellipse(0,0,p.size*.6,p.size*1.15,0,0,TAU);ctx.fill();ctx.restore();break;
         }
         case 'smoke': ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (1.6 - k * 0.6), 0, TAU); ctx.fill(); break;
         case 'flash': {
@@ -481,11 +524,16 @@ class Projectile {
       life: 60, color: '#fff', size: 10, kind: 'bolt', pierce: 0, burst: 1, pull: 0, static: false,
     }, o);
     this.t = 0; this.hitIds = new Set(); this.rot = 0;
+    if (this.kind === 'tidewave') this.waveHits = new Map();
     this.startX = this.x; this.startY = this.y;
   }
-  get box() { const s = this.size; return { x: this.x - s, y: this.y - s, w: s * 2, h: s * 2 }; }
+  get box() {
+    if (this.kind === 'tidewave') return {x:this.x-68, y:this.y-82, w:136, h:82};
+    const s = this.size; return { x: this.x - s, y: this.y - s, w: s * 2, h: s * 2 };
+  }
   update(match) {
     this.t++;
+    if (this.kind === 'tidewave') { this.updateTideWave(match); return; }
     const oldY = this.y;
     if (!this.static) { this.x += this.vx; this.y += this.vy; this.vy += this.grav || 0; }
     this.rot += 0.3;
@@ -564,8 +612,52 @@ class Projectile {
       AUDIO.sfx('bomb'); match.cam.shake(7);
     }
   }
+  updateTideWave(match) {
+    // `life` is a fixed tick budget, not a hit count: contacts never end the wave.
+    if (this.t > this.life) { this.dead = true; return; }
+    const oldY = this.y;
+    if (this.surface) {
+      const p = this.surface;
+      this.x += this.vx + (p.dx || 0);
+      if (this.x >= p.x && this.x <= p.x + p.w) {
+        this.y = p.y; this.vy = 0;
+      } else {
+        // A wave does not travel across empty air as if a platform continued.
+        this.surface = null; this.vy = .8; this.y += this.vy;
+      }
+    } else {
+      this.x += this.vx; this.vy = Math.min(14, this.vy + .65); this.y += this.vy;
+      // Falling from a platform or cast in midair: catch the first surface below.
+      const surfaces = [match.stage.ground, ...match.stage.platforms];
+      let landing = null;
+      for (const p of surfaces) {
+        if (this.x >= p.x && this.x <= p.x+p.w && oldY <= p.y && this.y >= p.y &&
+            (!landing || p.y < landing.y)) landing = p;
+      }
+      if (landing) { this.surface = landing; this.y = landing.y; this.vy = 0; }
+    }
+    if (this.x < match.blast.left-200 || this.x > match.blast.right+200 || this.y > match.blast.bottom+100) { this.dead=true; return; }
+    for (const f of match.fighters) {
+      if (f === this.owner || f.eliminated || f.invincible || (this.owner && match.sameTeam(this.owner, f))) continue;
+      if (!aabb(this.box, f.hurtbox)) continue;
+      const last = this.waveHits.get(f.id);
+      if (last !== undefined && this.t - last < this.rehit) continue;
+      this.waveHits.set(f.id, this.t);
+      if (f.shieldHP > 0) match.shieldHit(this.owner || f, f, this.damage, this.box);
+      else if (f.counterActive && this.owner) { f.counterHit = this.owner; f.counterActive = false; }
+      else match.hitFighter(this.owner, f, {damage:this.damage,bkb:this.bkb,kbs:this.kbs,angle:this.angle,proj:this});
+      match.fx.waterSplash(f.x, this.y, .45, this.color);
+    }
+    if (this.t % this.rehit === 1) match.itemsHitByAttack(this.owner, this.box, this.damage);
+    if (this.t % 8 === 0) match.fx.waterSplash(this.x, this.y, .32, this.color);
+  }
   draw(ctx, time) {
     ctx.save(); ctx.translate(this.x, this.y);
+    if (this.kind === 'tidewave') {
+      ctx.scale(this.vx < 0 ? -1 : 1, 1);
+      ctx.globalAlpha = clamp((this.life - this.t + 1) / this.fadeFrames, 0, 1);
+      drawWaterCrest(ctx, 140, 82, this.t); ctx.restore(); return;
+    }
     if (this.kind === 'soulblast') {
       // A bright violet comet: its core and trailing energy grow as it charges.
       const s = this.size, dir = this.vx < 0 ? -1 : 1;

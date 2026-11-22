@@ -288,7 +288,46 @@ FIGHTERS.marrow = {
   finalSmash:{name:'HOLLOW REQUIEM',type:'spin',duration:150,damage:45},
   grabRange:50,throwDmg:{f:9,b:11,u:8,d:7}
 };
-const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow'];
+/* TIDE — swift knife pressure and protective ocean magic. */
+FIGHTERS.tide = {
+  key:'tide', artFacing:1, name:'TIDE', title:'THE WAVE WARDEN', archetype:'Mobile / Counter',
+  description:'A swift ocean warden in turquoise shell armor, wielding a curved wave knife and the power of the sea.',
+  color:'#48d7df', theme:'#48d7df', body:{w:44,h:102},
+  stats:{weight:94,walk:2.5,run:6.7,air:4.8,fall:10.8,fastfall:17.2,gravity:.56,jumps:2,jumpV:12.8,djumpV:11.8,airJumps:1,size:1,traction:.53,airAccel:.35,dashFrames:10},
+  locomotion:'humanoid', weapon:'sword', weaponLen:42,
+  palettes:[
+    pal('Ocean','#d69670','#152936','#168a9b','#ef9d83','#48d7df','#15546b'),
+    pal('Coral','#d69670','#152936','#bb5b61','#ffd1b7','#ff8c86','#72373e'),
+    pal('Lagoon','#d69670','#152936','#367d63','#b8ddba','#73e2b3','#264d42'),
+    pal('Pearl','#d69670','#152936','#a39fbc','#f3dbe3','#dcbaff','#5f576f'),
+    pal('Sunset','#d69670','#152936','#ab7339','#ffe0a0','#ffd174','#664522'),
+    pal('Deep Sea','#b77d63','#111c28','#1c344d','#5a8093','#8cbde5','#101f31')
+  ],
+  moves:{
+    jab:mv({name:'Shell Prick',frames:22,startup:3,active:3,damage:3,bkb:8,kbs:24,angle:35,hitboxes:[hb(12,-62,48,36)]}),
+    ftilt:mv({name:'Wave Cut',frames:31,startup:5,active:4,damage:8,bkb:18,kbs:50,angle:38,hitboxes:[hb(14,-75,65,52)]}),
+    utilt:mv({name:'Crest Lift',frames:31,startup:5,active:5,damage:8,bkb:18,kbs:52,angle:92,hitboxes:[hb(-25,-115,75,58)]}),
+    dtilt:mv({name:'Ebb Sweep',frames:28,startup:4,active:4,damage:7,bkb:14,kbs:40,angle:20,hitboxes:[hb(12,-30,58,35)]}),
+    dashattack:mv({name:'Riptide Rush',frames:36,startup:6,active:10,damage:10,bkb:22,kbs:48,angle:50,hitboxes:[hb(3,-77,68,65)]}),
+    fsmash:mv({name:'Breaker Blade',frames:49,startup:12,active:5,damage:15,bkb:27,kbs:84,angle:36,charge:1,hitboxes:[hb(14,-82,82,62)]}),
+    usmash:mv({name:'High Tide',frames:46,startup:10,active:5,damage:14,bkb:25,kbs:80,angle:88,charge:1,hitboxes:[hb(-30,-122,84,68)]}),
+    dsmash:mv({name:'Undercurrent',frames:45,startup:9,active:5,damage:12,bkb:22,kbs:75,angle:22,charge:1,hitboxes:[hb(-62,-30,76,38),hb(14,-30,76,38)]}),
+    nair:mv({name:'Sea Circle',frames:31,startup:4,active:8,damage:8,bkb:14,kbs:48,angle:45,hitboxes:[hb(-43,-78,90,64)]}),
+    fair:mv({name:'Foam Edge',frames:34,startup:6,active:5,damage:10,bkb:17,kbs:58,angle:40,hitboxes:[hb(12,-85,70,60)]}),
+    bair:mv({name:'Backwash',frames:34,startup:6,active:4,damage:11,bkb:19,kbs:62,angle:148,hitboxes:[hb(-80,-80,68,55)]}),
+    uair:mv({name:'Crest Arc',frames:31,startup:5,active:5,damage:9,bkb:15,kbs:55,angle:88,hitboxes:[hb(-34,-120,72,58)]}),
+    dair:mv({name:'Diving Edge',frames:37,startup:8,active:5,damage:11,bkb:17,kbs:54,angle:268,spike:1,hitboxes:[hb(-24,-18,52,60)]})
+  },
+  specials:{
+    neutral:{name:'TIDAL WAVE',desc:'Hold G, then release a traveling wave; each second held gives 2 seconds of wave',type:'tidewave',frames:40,startup:7,active:6,damage:2,bkb:16,kbs:20,angle:20,chargeFrames:300,waveLifeMultiplier:2,minWaveLife:18,waveSpeed:5,rehit:12},
+    side:{name:'SURGE STEP',desc:'Rush forward through the surf with a knife strike',type:'dash',frames:42,startup:6,active:13,damage:11,bkb:22,kbs:53,angle:52,rushSpeed:13,dist:155,hitboxes:[hb(4,-72,66,58)]},
+    up:{name:'GEYSER LEAP',desc:'Summon a looping wave that lifts you into the air',type:'recover',frames:52,startup:15,active:8,damage:9,bkb:17,kbs:46,angle:82,rise:9.8,drift:4.5,hitboxes:[hb(-48,-105,96,90)]},
+    down:{name:'OCEAN GUARDIAN',desc:'Call the guardian to counter an incoming strike',type:'counter',frames:42,startup:1,window:20,mult:1.35}
+  },
+  finalSmash:{name:'OCEAN TEMPEST',type:'spin',duration:150,damage:43},
+  grabRange:44,throwDmg:{f:7,b:9,u:7,d:6}
+};
+const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow', 'tide'];
 
 /* ============================================================
    FRAME-DATA TUNING PASS  —  one place, so every fighter moves alike
