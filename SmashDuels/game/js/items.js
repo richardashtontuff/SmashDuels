@@ -108,6 +108,16 @@ class FXSystem {
     const a = rand(TAU), r = 40 + Math.sin(t * 0.4) * 6;
     this.particle({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.8, vx: -Math.cos(a) * 3, vy: -Math.sin(a) * 3, life: 12, size: rand(2, 4.4), color, grav: 0, drag: 1, shape: 'spark' });
   }
+  // A burst of roots, timed to Briar's final-smash damage pulse.
+  thornField(x, y, radius, color) {
+    for (let i=-4; i<=4; i++) {
+      const dx=i*radius/4, height=40+65*(1-Math.abs(i)/5);
+      this.particle({x:x+dx,y,vx:0,vy:0,life:22,size:height,color,grav:0,drag:1,shape:'thorn'});
+    }
+    for (let i=0;i<14;i++) this.particle({x:x+rand(-radius,radius),y:y-rand(0,35),
+      vx:rand(-2,2),vy:rand(-5,-1),life:randInt(15,28),size:rand(3,6),color,grav:.12,drag:.98,shape:'leaf'});
+    this.ring(x,y,color,radius,20);
+  }
   speedLines(f) {
     for (let i = 0; i < 10; i++) {
       this.particle({ x: f.x - f.facing * rand(0, 60), y: f.y - rand(10, 100), vx: -f.facing * rand(4, 10), vy: rand(-0.6, 0.6), life: randInt(8, 18), size: rand(10, 34), color: f.pal.accent, grav: 0, drag: 1, shape: 'streak' });
@@ -181,6 +191,18 @@ class FXSystem {
           const a = Math.atan2(p.vy, p.vx);
           ctx.rotate(a); ctx.fillRect(-p.size * 2.2, -p.size * 0.4, p.size * 4.4, p.size * 0.8);
           ctx.restore(); break;
+        }
+        case 'leaf': {
+          ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.t*.16+p.rot);
+          ctx.beginPath();ctx.moveTo(-p.size,0);ctx.quadraticCurveTo(0,-p.size,p.size,0);
+          ctx.quadraticCurveTo(0,p.size,-p.size,0);ctx.fill();ctx.restore();break;
+        }
+        case 'thorn': {
+          const h=p.size*Math.min(1,p.t/4), w=13;
+          ctx.save();ctx.globalCompositeOperation='source-over';ctx.translate(p.x,p.y);
+          ctx.fillStyle='#4a3829';ctx.strokeStyle='#97c75b';ctx.lineWidth=2;
+          ctx.beginPath();ctx.moveTo(-w,0);ctx.lineTo(w*.25,-h);ctx.lineTo(w,0);ctx.closePath();ctx.fill();ctx.stroke();
+          ctx.fillStyle='#87b544';ctx.beginPath();ctx.moveTo(-w*.7,0);ctx.lineTo(w*.05,-h*.65);ctx.lineTo(w*.15,0);ctx.closePath();ctx.fill();ctx.restore();break;
         }
         case 'rushRocket': {
           // Cosmetic backfire rocket, pointing opposite the rush with an

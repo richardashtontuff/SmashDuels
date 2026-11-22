@@ -367,7 +367,47 @@ FIGHTERS.vector = {
   grabRange:46,throwDmg:{f:8,b:10,u:8,d:7}
 };
 
-const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow', 'tide', 'vector'];
+/* BRIAR — a swift forest guardian with a long vine and earth magic. */
+FIGHTERS.briar = {
+  key:'briar', artFacing:1, name:'BRIAR', title:'THE WILDWARDEN', archetype:'Range / Mobility',
+  description:'A fierce forest guardian who lashes with living vines and raises jagged earth beneath her foes.',
+  color:'#b4e65f', theme:'#83b842', body:{w:42,h:105},
+  stats:{weight:94,walk:2.5,run:6.3,air:4.7,fall:11,fastfall:18,gravity:.57,jumps:2,jumpV:12.6,djumpV:11.9,airJumps:1,size:1,traction:.54,airAccel:.34,dashFrames:10},
+  locomotion:'humanoid', weapon:'fists', weaponLen:0,
+  palettes:[
+    pal('Wildwood','#c58f66','#fff1c6','#335b25','#658c39','#b4e65f','#263d20'),
+    pal('Autumn','#c58f66','#fff1c6','#89502c','#c3823f','#ffcb64','#593b26'),
+    pal('Moonleaf','#c58f66','#fff1c6','#34506e','#7796a7','#9ddfff','#273749'),
+    pal('Bloom','#c58f66','#fff1c6','#773f59','#c17a95','#ffb5cb','#4b2e3b'),
+    pal('Golden','#c58f66','#fff1c6','#70602b','#bda84e','#f5df76','#494022'),
+    pal('Nightshade','#c58f66','#fff1c6','#36334f','#746687','#d7a7ff','#292638')
+  ],
+  moves:{
+    jab:mv({name:'Bramble Tap',frames:22,startup:3,active:3,damage:4,bkb:8,kbs:25,angle:35,hitboxes:[hb(12,-64,52,35)]}),
+    ftilt:mv({name:'Vine Flick',frames:33,startup:6,active:5,damage:8,bkb:16,kbs:49,angle:38,hitboxes:[hb(15,-76,83,50)]}),
+    utilt:mv({name:'Branch Rise',frames:32,startup:6,active:5,damage:8,bkb:17,kbs:50,angle:90,hitboxes:[hb(-24,-122,75,68)]}),
+    dtilt:mv({name:'Root Sweep',frames:29,startup:5,active:4,damage:7,bkb:14,kbs:42,angle:20,hitboxes:[hb(10,-32,72,38)]}),
+    dashattack:mv({name:'Thorn Rush',frames:36,startup:6,active:9,damage:10,bkb:21,kbs:49,angle:45,hitboxes:[hb(0,-75,70,60)]}),
+    fsmash:mv({name:'Wild Lash',frames:50,startup:12,active:5,damage:15,bkb:27,kbs:82,angle:35,charge:1,hitboxes:[hb(14,-78,105,60)]}),
+    usmash:mv({name:'Canopy Break',frames:48,startup:11,active:5,damage:14,bkb:25,kbs:80,angle:88,charge:1,hitboxes:[hb(-30,-128,84,72)]}),
+    dsmash:mv({name:'Bramble Sweep',frames:47,startup:10,active:5,damage:13,bkb:23,kbs:75,angle:22,charge:1,hitboxes:[hb(-70,-32,80,40),hb(12,-32,80,40)]}),
+    nair:mv({name:'Leaf Spiral',frames:32,startup:4,active:8,damage:8,bkb:14,kbs:46,angle:45,hitboxes:[hb(-46,-82,94,68)]}),
+    fair:mv({name:'Vine Snap',frames:34,startup:7,active:5,damage:10,bkb:18,kbs:58,angle:40,hitboxes:[hb(12,-84,83,58)]}),
+    bair:mv({name:'Reverse Thorn',frames:34,startup:6,active:5,damage:10,bkb:20,kbs:60,angle:148,hitboxes:[hb(-88,-82,76,56)]}),
+    uair:mv({name:'Canopy Reach',frames:32,startup:5,active:5,damage:9,bkb:15,kbs:52,angle:88,hitboxes:[hb(-34,-122,76,60)]}),
+    dair:mv({name:'Root Drop',frames:38,startup:8,active:5,damage:11,bkb:18,kbs:53,angle:268,spike:1,hitboxes:[hb(-26,-18,55,62)]})
+  },
+  specials:{
+    neutral:{name:'VINE WHIP',desc:'Snap a long vine straight ahead',type:'vinelash',frames:48,startup:11,active:5,damage:10,bkb:18,kbs:53,angle:38,hitboxes:[hb(20,-75,270,54)]},
+    side:{name:'BRAMBLE GRAPPLE',desc:'Dash with a vine that grabs, lifts and slams an opponent',type:'vinedash',frames:62,startup:7,active:13,damage:13,bkb:24,kbs:64,angle:65,rushSpeed:13,dist:155,vineReach:140,slamTicks:20},
+    up:{name:'CANOPY LEAP',desc:'Shoot vines upward; tether and pull to nearby ledges offstage',type:'recover',frames:43,startup:4,active:15,damage:8,bkb:16,kbs:45,angle:82,rise:10.5,drift:4.5,leafRise:true,vineTether:true,tetherRange:351,queueRecoveryJump:true,hitboxes:[hb(-40,-98,80,85)]},
+    down:{name:'EARTH SPIKE',desc:'Erupt jagged spikes around Briar',type:'earthspike',frames:47,startup:12,active:6,damage:14,bkb:24,kbs:72,angle:82,hitboxes:[hb(-88,-108,176,115)]}
+  },
+  finalSmash:{name:'WILD OVERGROWTH',type:'grove',duration:135,damage:44},
+  grabRange:48,throwDmg:{f:7,b:9,u:8,d:7}
+};
+
+const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow', 'tide', 'vector', 'briar'];
 
 /* ============================================================
    FRAME-DATA TUNING PASS  —  one place, so every fighter moves alike

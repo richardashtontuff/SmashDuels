@@ -86,6 +86,7 @@
 #screen-select[data-fighter="marrow"] .showcase-atmosphere::before { background: radial-gradient(circle,#d5a3ff 0 2px,transparent 6px) 0 0 / 89px 72px, radial-gradient(circle,#ad62ff 0 1px,transparent 4px) 30px 20px / 53px 90px; animation-duration: 12s; }
 #screen-select[data-fighter="valor"] .showcase-atmosphere::before { background: linear-gradient(130deg, transparent 46%, #abf4ff 48%, transparent 50%) 0 0 / 94px 65px, radial-gradient(circle,#ffca74 0 1px,transparent 3px) 8px 4px / 53px 67px; }
 #screen-select[data-fighter="vector"] .showcase-atmosphere::before { background: radial-gradient(circle,#ffb14f 0 2px,transparent 4px) 0 0 / 73px 84px, linear-gradient(130deg,transparent 47%,#70ccff 49%,transparent 51%) 30px 20px / 110px 100px; animation-duration: 8s; }
+#screen-select[data-fighter="briar"] .showcase-atmosphere::before { background: radial-gradient(ellipse,#d9ff8f 0 2px,transparent 5px) 0 0 / 79px 92px, radial-gradient(ellipse,#68d76f 0 2px,transparent 5px) 30px 20px / 53px 73px; animation-duration: 11s; }
 @keyframes world-drift { from { transform: scale(1.04) translateX(-1%); } to { transform: scale(1.12) translateX(1%); } }
 @keyframes sparks-rise { from { transform: translate(0, 0); } to { transform: translate(45px, -71px); } }
 @keyframes light-sweep { from { transform: translateX(-30%); } to { transform: translateX(35%); } }

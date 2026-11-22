@@ -30,5 +30,9 @@
   "vector": {
     "handX": 174.3,
     "handY": 7.87
+  },
+  "briar": {
+    "handX": 172.26,
+    "handY": 4.93
   }
 }

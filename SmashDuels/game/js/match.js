@@ -264,8 +264,10 @@ class Match {
     // resolve active grabs every frame (even during intro)
     for (const f of this.fighters) {
       const t = f.grabbing;
-      if (t && (t.eliminated || t.grabbedBy !== f)) { f.grabbing = null; if (t) t.grabbedBy = null; }
-      if (t) t.hitstun = 0;
+      if (t && (t.eliminated || t.grabbedBy !== f)) {
+        f.grabbing = null;
+        if (t.grabbedBy === f) { t.grabbedBy = null; t.vineGrabbed = false; }
+      } else if (t) t.hitstun = 0;
       /* The other direction, which used to have no check at all: if the *grabber*
          goes away — KO'd mid-hold, eliminated, reset for a respawn — the victim is
          left pointing at nobody. `grabbed` is a state that owns the body (it pins
@@ -273,7 +275,7 @@ class Match {
          fighter in mid-air at whatever height they were at, permanently. 4-player is
          where it showed up: someone always dies while holding someone. */
       if (f.grabbedBy && f.grabbedBy.grabbing !== f) {
-        f.grabbedBy = null;
+        f.grabbedBy = null; f.vineGrabbed = false;
         if (f.state === 'grabbed') { f.state = f.onGround ? 'idle' : 'fall'; f.hitstun = 0; }
       }
     }
@@ -529,7 +531,9 @@ class Match {
       target.state = 'launch';
       target.ledge = null;
       target.shieldHP = 0; target.shielding = false;
-      target.grabbing = null; target.grabbedBy = null;
+      if (target.grabbing && target.grabbing.vineGrabbed) target.releaseVineGrab();
+      if (target.vineGrabbed && target.grabbedBy && target.grabbedBy.grabbing === target) target.grabbedBy.grabbing = null;
+      target.vineGrabbed = false; target.grabbing = null; target.grabbedBy = null;
     }
     target.charging = false;
     target.lastHitBy = attacker || null;
