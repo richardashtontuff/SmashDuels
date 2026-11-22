@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="css/ui-refresh.css?v=K52">
 <link rel="stylesheet" href="css/ui-fx.css?v=K52">
 <link rel="stylesheet" href="css/fighter-profiles.css?v=K52">
+<link rel="stylesheet" href="css/online.css?v=2">
 </head>
 <body>
 <div id="app">
@@ -47,7 +48,7 @@
               <button class="mbtn modebtn" data-mode="classic"><span class="tile-no">02</span><strong>CLASSIC</strong><small>5-stage gauntlet</small></button>
               <button class="mbtn modebtn" data-mode="targets"><span class="tile-no">03</span><strong>TARGETS</strong><small>Break all 10</small></button>
               <button class="mbtn modebtn" data-mode="homered"><span class="tile-no">04</span><strong>HOME-RUN</strong><small>Launch the bag</small></button>
-              <button class="mbtn modebtn" data-mode="multiman"><span class="tile-no">05</span><strong>MULTI-MAN</strong><small>Face 10 foes</small></button>
+              <button class="mbtn modebtn" data-mode="online"><span class="tile-no">05</span><strong>ONLINE</strong><small>1v1 queue · private rooms</small></button>
             </div>
           </div>
           <div class="mode-preview" aria-live="polite"><span class="mode-preview-index">01 / BATTLE</span><span class="mode-preview-copy">A CUSTOM BATTLE FOR UP TO FOUR FIGHTERS</span><span class="mode-preview-mark" aria-hidden="true">◆</span></div>
@@ -256,6 +257,37 @@
   </section>
 
   <!-- ================= IN-MATCH (canvas is separate) ================= -->
+  <section class="screen" id="screen-online">
+    <div class="online-shell">
+      <header><div><div class="online-eyebrow">RIFT RUMBLE / MULTIPLAYER</div><h1>ONLINE</h1><p>Find a rival or bring your friends.</p></div><button id="online-back" class="online-secondary">← BACK</button></header>
+      <div id="online-status" role="status" aria-live="polite">Connect to play online.</div>
+      <div id="online-entry" class="online-grid">
+        <div class="online-card"><div class="online-eyebrow">01 / MATCHMAKING</div><h2>1v1 QUEUE</h2><p>Vote on a stage, then choose a fighter in 10 seconds.</p><button id="online-queue">FIND A MATCH →</button></div>
+        <div class="online-card"><div class="online-eyebrow">02 / PLAY TOGETHER</div><h2>PRIVATE ROOM</h2><p>Up to four players. Share your room code with friends.</p><button id="online-create">CREATE ROOM</button><div class="online-join"><input id="online-code" aria-label="Room code" maxlength="6" placeholder="ROOM CODE" autocomplete="off"><button id="online-join">JOIN →</button></div></div>
+      </div>
+      <div id="online-room" hidden>
+        <div class="online-room-bar"><div><div class="online-eyebrow">LIVE LOBBY / FIGHTER SELECT</div><h2 id="online-room-info">CONNECTING</h2></div><div class="online-room-actions"><button id="online-leave" class="online-secondary">LEAVE ROOM</button><button id="online-start" hidden>START FIGHT ▶</button></div></div>
+        <div class="online-section-title"><span>01 / PLAYERS IN THE RIFT</span><span id="online-player-count"></span></div>
+        <div id="online-players" class="online-players" aria-label="Connected players"></div>
+        <div id="online-fighter-section" class="online-workspace" hidden>
+          <div class="online-roster-panel">
+            <div class="online-section-title"><span>02 / CHOOSE YOUR FIGHTER</span><span>YOUR SELECTION IS LIVE ✦</span></div>
+            <div id="online-fighters" class="online-fighters" aria-label="Choose your fighter"></div>
+          </div>
+          <div id="online-showcase" class="online-showcase">
+            <div class="online-showcase-top">YOUR FIGHTER <span> / READY TO RUMBLE</span></div>
+            <div class="online-showcase-scene"><img id="online-hero-image" alt=""><div class="online-hero-copy"><span id="online-hero-player"></span><h3 id="online-hero-name"></h3><p id="online-hero-title"></p></div></div>
+            <div class="online-showcase-note"><div class="online-palette-label">COLOR / <span id="online-palette-name"></span></div><div id="online-palettes" class="online-palettes" aria-label="Choose your fighter color"></div><p>Everyone in the room sees your choices instantly.</p></div>
+          </div>
+        </div>
+        <div id="online-stage-section" class="online-stage-panel" hidden>
+          <div class="online-section-title"><span id="online-stage-heading">03 / CHOOSE YOUR ARENA</span><span id="online-stage-hint"></span></div>
+          <div id="online-stages" class="online-stages" aria-label="Choose an arena"></div>
+          <div class="online-stage-footer"><div class="online-current-arena"><canvas id="online-selected-stage" width="180" height="90" aria-hidden="true"></canvas><div><span>LIVE ARENA PICK</span><strong id="online-stage-current"></strong></div></div><button id="online-vote" hidden>LOCK IN STAGE ▶</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
   <section class="screen" id="screen-match"></section>
 
   <!-- ================= TOUCH ================= -->
@@ -281,6 +313,7 @@
 <script src="js/match.js?v=K52"></script>
 <script src="js/modes.js?v=K52"></script>
 <script src="js/cloud.js?v=K52"></script>
-<script src="js/ui.js?v=K52"></script>
+<script src="js/online.js?v=2"></script>
+<script src="js/ui.js?v=K53"></script>
 </body>
 </html>
