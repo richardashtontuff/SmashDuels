@@ -242,7 +242,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 .touchbtn[data-touch=jump] { right: 104px; bottom: 152px; width: 56px; height: 56px; }
 .touchbtn[data-touch=shield] { right: 30px; bottom: 52px; width: 52px; height: 52px; }
 .touchbtn[data-touch=grab] { right: 172px; bottom: 44px; width: 46px; height: 46px; font-size: 9px; }
-@media (hover: none) and (pointer: coarse) { #touch-controls { display: block; } .screen.active ~ #hud #hud-slots { bottom: 230px; } }
+@media (hover: none) and (pointer: coarse) { #touch-controls { display: block; } }
 
 /* ---------- scrollbars ---------- */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -288,48 +288,36 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 .stage-card-meta { display: flex; justify-content: space-between; margin-top: 8px; color: var(--c); font-size: 9px; letter-spacing: .12em; font-weight: 900; }
 .stage-actions { bottom: 18px; }
 
-#hud-slots { bottom: max(12px, env(safe-area-inset-bottom)); gap: 8px; padding: 0 12px; align-items: flex-end; }
-.hud-slot { --c: #fff; position: relative; flex: 1 1 0; min-width: 0; max-width: 210px; min-height: 76px; gap: 0; padding: 0 9px 0 0; border-radius: 2px;
+#hud-slots { bottom: max(4px, env(safe-area-inset-bottom, 0px)); gap: 8px; padding: 0 12px; align-items: flex-end; }
+.hud-slot { --c: #fff; position: relative; flex: 1 1 0; min-width: 0; max-width: 210px; min-height: 64px; gap: 0; padding: 0 9px 0 0; border-radius: 2px;
   background: linear-gradient(110deg, color-mix(in srgb, var(--c) 20%, #101725), rgba(5,9,18,.96) 60%); border: 1px solid color-mix(in srgb, var(--c) 60%, #293548); border-bottom: 3px solid var(--c);
   box-shadow: 0 5px 16px #000b, inset 0 1px #ffffff25; }
 .hud-slot::before { content: ''; position: absolute; top: -3px; left: 8px; width: 35%; height: 3px; background: var(--c); box-shadow: 0 0 10px var(--c); transform: skew(-20deg); }
 .hud-slot.lead { box-shadow: 0 5px 16px #000b, inset 0 1px #ffffff25, 0 0 16px color-mix(in srgb, var(--c) 28%, transparent); }
 .hud-portrait-wrap { position: relative; align-self: stretch; flex: 0 0 62px; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; background: linear-gradient(150deg, color-mix(in srgb, var(--c) 42%, #131b2b), transparent); }
-.hud-portrait { width: 62px; height: 73px; object-fit: contain; object-position: bottom; filter: drop-shadow(1px 2px 3px #000); }
+.hud-portrait { width: 62px; height: 61px; object-fit: contain; object-position: bottom; filter: drop-shadow(1px 2px 3px #000); }
 .hud-player { position: absolute; top: 4px; left: 4px; background: var(--c); color: #080c14; padding: 2px 4px; font-size: 9px; font-weight: 1000; line-height: 1; }
-.hud-info { min-width: 0; padding: 7px 0 6px 7px; }
-.hud-tag { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #dfeaff; font-size: 9px; letter-spacing: .1em; }
-.hud-dmg .pct { font-size: clamp(26px, 3.4vw, 42px); font-weight: 1000; font-style: italic; letter-spacing: -.06em; }
+.hud-info { min-width: 0; padding: 4px 0 4px 7px; }
+.hud-tag { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #dfeaff; font-size: 9px; letter-spacing: .1em; line-height: 1; }
+.hud-dmg .pct { font-size: clamp(24px, 2.4vw, 32px); font-weight: 1000; font-style: italic; letter-spacing: -.06em; }
 .hud-dmg .pctsign { color: #f4f8ff; font-size: 16px; opacity: 1; }
-.hud-stocks { flex-wrap: wrap; margin-top: 3px; }
+.hud-stocks { flex-wrap: wrap; margin-top: 2px; }
 .stockdot { width: 8px; height: 8px; border-radius: 0; transform: rotate(45deg); box-shadow: 0 0 4px color-mix(in srgb, var(--c) 65%, transparent); }
 #hud-timer { display: flex; position: absolute; top: 8px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; justify-content: center; min-width: 108px; height: 55px; padding: 3px 15px 4px; clip-path: polygon(7% 0,93% 0,100% 16%,92% 100%,8% 100%,0 16%);
   background: linear-gradient(#aab7c7 0%, #4a5a6a 9%, #1a2434 13%, #080d17 88%, #667787 100%); color: #fff; text-shadow: 0 2px 5px #000; font-size: 25px; font-weight: 1000; line-height: 1; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 #hud-timer small { color: #aebcd0; font-size: 8px; font-style: normal; letter-spacing: .25em; margin-bottom: 3px; }
 #stage-name { top: 66px; left: 50%; transform: translateX(-50%); text-align: center; white-space: nowrap; font-size: 9px; color: #c7d4e8; text-shadow: 0 2px 5px #000; letter-spacing: .17em; }
 #btn-pause { top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 3px; background: #111a2bdc; border-color: #526276; }
-#hud-matchup { position: absolute; inset: 0; }
-.matchup-panel { position: absolute; top: 13px; width: min(30vw, 385px); height: 58px; display: flex; align-items: center; gap: 8px; padding: 3px 10px 3px 4px; border: 1px solid #8292a6; border-bottom: 2px solid var(--c); background: linear-gradient(150deg, #253248f2, #080e19ed); box-shadow: 0 4px 12px #0009; }
-.matchup-panel.left { left: 16px; clip-path: polygon(0 0, 95% 0, 100% 100%, 0 100%); padding-right: 20px; }
-.matchup-panel.right { right: 55px; flex-direction: row-reverse; clip-path: polygon(5% 0, 100% 0, 100% 100%, 0 100%); padding: 3px 4px 3px 20px; }
-.matchup-panel.out { opacity: .45; filter: grayscale(.8); }
-.matchup-panel img { width: 48px; height: 48px; object-fit: contain; object-position: bottom; filter: drop-shadow(0 2px 3px #000); }
-.matchup-info { min-width: 0; flex: 1; }
-.matchup-name { display: flex; justify-content: space-between; gap: 4px; font-size: 10px; font-weight: 900; letter-spacing: .06em; white-space: nowrap; }
-.matchup-name span:first-child { overflow: hidden; text-overflow: ellipsis; }
-.damage-track { height: 10px; margin: 4px 0 3px; background: #050912; border: 1px solid #728198; transform: skew(-12deg); }
-.damage-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd069, #ff493b); box-shadow: 0 0 8px #ff403c90; transition: width .24s ease-out; }
-.matchup-bottom { display: flex; justify-content: space-between; gap: 4px; color: #91a3b9; font-size: 8px; font-weight: 900; letter-spacing: .12em; }
-.smash-status { color: #758195; display: inline-flex; align-items: center; white-space: nowrap; gap: 3px; }
-.smash-segments { display: inline-flex; gap: 2px; }
-.smash-segments i { width: 4px; height: 6px; background: #536274; transform: skew(-14deg); }
-.smash-status.ready .smash-segments i { background: #ffe35b; box-shadow: 0 0 5px #ffd23a; }
-.smash-status.ready { color: #ffe35b; text-shadow: 0 0 8px #ffd23a; }
+/* Damage and Final Smash readiness live in the bottom cards, not a second
+   pair of matchup panels over the arena. */
+.hud-meter { height: 3px; margin-top: 2px; background: #050912; overflow: hidden; }
+.damage-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd069, #ff493b); transition: width .16s ease-out; }
+.hud-ready { position: absolute; left: 4px; bottom: 3px; z-index: 1; color: #ffe35b; font-size: 18px; line-height: 1; text-shadow: 0 0 5px #000, 0 0 8px #ffd23a; }
+.hud-ready[hidden] { display: none; }
 @media (max-width: 700px) {
   .stage-intro { top: 73px; left: 16px; right: 16px; font-size: 8px; }
   .stage-grid { inset: 102px 12px 78px; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 8px; }
   .stage-actions { bottom: 12px; left: 14px; right: 14px; }
-  #hud-matchup { display: none !important; }
   #hud-timer { top: 6px; min-width: 80px; height: 42px; font-size: 20px; }
   #stage-name { top: 51px; font-size: 8px; }
   #hud-slots { gap: 3px; padding: 0 4px; }
@@ -343,4 +331,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
   .hud-dmg .pctsign { font-size: 10px; }
   .stockdot { width: 5px; height: 5px; }
 }
-@media (hover: none) and (pointer: coarse) { #hud #hud-slots { bottom: 230px; } }
+@media (max-width: 420px) {
+  #hud-slots[data-count="4"] .hud-portrait-wrap { flex-basis: 22px; }
+  #hud-slots[data-count="4"] .hud-portrait { width: 22px; }
+  #hud-slots[data-count="4"] .hud-dmg .pct { font-size: 16px; }
+  #hud-slots[data-count="4"] .hud-stocks { gap: 1px; }
+  #hud-slots[data-count="4"] .stockdot { width: 4px; height: 4px; }
+}
+/* Keep the low HUD clear of the touch buttons, including device safe areas. */
+@media (hover: none) and (pointer: coarse) {
+  #touch-controls .touchbtn { transform: translateY(calc(-48px - env(safe-area-inset-bottom, 0px))); }
+}
