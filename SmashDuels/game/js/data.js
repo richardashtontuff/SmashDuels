@@ -577,7 +577,7 @@ const STAGES = {
     ledges: true, hazard: null,
   },
   foundry: {
-    key: 'foundry', name: 'EMBER FOUNDRY', sub: 'Moving lift · lava hazard', theme: 'foundry',
+    key: 'foundry', name: 'EMBER FOUNDRY', sub: 'Moving lift · lava and meteors', theme: 'foundry',
     bg: ['#1d0d09', '#3a1d14', '#6a3520'], accent: '#ff9330',
     ground: { x: -540, y: 0, w: 1080, h: 44 },
     platforms: [
@@ -743,7 +743,253 @@ const STAGES = {
     ledges: true, hazard: null,
   },
 };
-const STAGE_KEYS = Object.keys(STAGES);
+// Dynamic-stage interpretations: stage motion is simulated by Match on both
+// local and authoritative online games; these are not exact recreations.
+Object.assign(STAGES, {
+  smashville: {
+    key:'smashville', name:'SMASHVILLE', sub:'One gliding platform', theme:'city',
+    bg:['#12200f','#26451f','#4a7038'], accent:'#9be84f',
+    ground:{x:-600,y:0,w:1200,h:44},
+    platforms:[{x:-145,y:-200,w:290,h:16,motion:{kind:'sine',ax:340,ay:0,speed:.006,hazardMotion:true}}],
+    ledges:true, hazard:null,
+  },
+  townandcity: {
+    key:'townandcity',name:'TOWN AND CITY',sub:'Platforms travel between formations',theme:'city',
+    bg:['#101626','#22304a','#48566f'],accent:'#ffd166',ground:{x:-680,y:0,w:1360,h:44},
+    platforms:[
+      {x:-360,y:-185,w:200,h:16,motion:{kind:'town',slot:0}},
+      {x:-100,y:-300,w:200,h:16,motion:{kind:'town',slot:1}},
+      {x:160,y:-185,w:200,h:16,motion:{kind:'town',slot:2}},
+      {x:-360,y:-185,w:200,h:16,motion:{kind:'town',slot:3}},
+      {x:160,y:-185,w:200,h:16,motion:{kind:'town',slot:4}},
+    ],ledges:true,hazard:null,
+  },
+  fountain: {
+    key:'fountain',name:'FOUNTAIN OF DREAMS',sub:'Independent rising and sinking platforms',theme:'shrine',
+    bg:['#19132e','#473168','#725288'],accent:'#ffaee9',ground:{x:-560,y:0,w:1120,h:44},
+    platforms:[
+      {x:-360,y:-125,w:220,h:16,motion:{kind:'fountain',amp:150,speed:.007,phase:0,hazardMotion:true}},
+      {x:140,y:-145,w:220,h:16,motion:{kind:'fountain',amp:170,speed:.009,phase:1.7,hazardMotion:true}},
+      {x:-110,y:-330,w:220,h:16},
+    ],ledges:true,hazard:null,
+  },
+  hollowbastion: {
+    key:'hollowbastion',name:'HOLLOW BASTION',sub:'A drifting platform that separates',theme:'comet',
+    bg:['#17172d','#393251','#76658a'],accent:'#e6bcff',ground:{x:-570,y:0,w:1140,h:44},
+    platforms:[
+      {x:-130,y:-220,w:130,h:16,motion:{kind:'split',side:-1}},
+      {x:0,y:-220,w:130,h:16,motion:{kind:'split',side:1}},
+    ],ledges:true,hazard:null,
+  },
+  northerncave: {
+    key:'northerncave',name:'NORTHERN CAVE',sub:'Diagonal moving platforms',theme:'comet',
+    bg:['#071d27','#124459','#297c80'],accent:'#70f2d8',ground:{x:-580,y:0,w:1160,h:44},
+    platforms:[
+      {x:-360,y:-180,w:210,h:16,motion:{kind:'sine',ax:80,ay:95,speed:.008,phase:0}},
+      {x:150,y:-180,w:210,h:16,motion:{kind:'sine',ax:-80,ay:95,speed:.008,phase:Math.PI}},
+    ],ledges:true,hazard:null,
+  },
+  dreamland: {
+    key:'dreamland',name:'DREAM LAND',sub:'Periodic crosswinds',theme:'hollow',
+    bg:['#1b3423','#3c7545','#91b875'],accent:'#e7f9a3',ground:{x:-590,y:0,w:1180,h:44},
+    platforms:[{x:-330,y:-190,w:200,h:16},{x:130,y:-190,w:200,h:16},{x:-100,y:-340,w:200,h:16}],
+    ledges:true,hazard:{type:'wind',period:900,duration:240,strength:.18},
+  },
+  brinstar: {
+    key:'brinstar',name:'BRINSTAR',sub:'Acid · meteors · floor spikes',theme:'foundry',
+    bg:['#1b0f27','#3e2050','#734874'],accent:'#aaff70',ground:{x:-560,y:0,w:1120,h:44},
+    platforms:[{x:-330,y:-190,w:200,h:16},{x:130,y:-190,w:200,h:16},{x:-100,y:-340,w:200,h:16}],
+    ledges:true,hazard:{type:'acid',bottom:360,top:-75,period:900,dmg:8},
+  },
+});
+// Reference-inspired arenas. The artwork is original; geometry is adapted to the
+// engine's single solid deck and one-way platforms rather than a 1:1 recreation.
+Object.assign(STAGES, {
+  tortimerisland: {
+    key:'tortimerisland', name:'TORTIMER ISLAND', sub:'Palm platforms · healing fruit', theme:'coast', backdrop:'island', surface:'sand',
+    bg:['#16486a','#35a1b2','#d2b26b'], accent:'#e9d78e', ground:{x:-590,y:0,w:1180,h:44},
+    platforms:[{x:-405,y:-155,w:165,h:16},{x:240,y:-155,w:165,h:16}], ledges:true,hazard:null,
+  },
+  pictochat2: {
+    key:'pictochat2', name:'PICTOCHAT 2', sub:'Alternating sketch platforms', theme:'arena', backdrop:'picto', surface:'ink',
+    bg:['#e9e6dd','#d7d4ca','#a7a49b'], accent:'#282522', ground:{x:-560,y:0,w:1120,h:44},
+    platforms:[
+      {x:-370,y:-160,w:220,h:14,motion:{kind:'sketch',group:0,hazardMotion:true}},
+      {x:150,y:-160,w:220,h:14,motion:{kind:'sketch',group:0,hazardMotion:true}},
+      {x:-120,y:-290,w:240,h:14,motion:{kind:'sketch',group:1,hazardMotion:true}},
+      {x:-440,y:-255,w:180,h:14,motion:{kind:'sketch',group:1,hazardMotion:true}},
+      {x:260,y:-255,w:180,h:14,motion:{kind:'sketch',group:1,hazardMotion:true}},
+    ],ledges:true,hazard:null,
+  },
+  newdonkcityhall: {
+    key:'newdonkcityhall',name:'NEW DONK CITY HALL',sub:'City hall with moving side lifts',theme:'city',backdrop:'cityhall',surface:'stone',
+    bg:['#1e293c','#6c7483','#b4a899'],accent:'#f6d58e',ground:{x:-610,y:0,w:1220,h:44},
+    platforms:[{x:-370,y:-170,w:200,h:16,motion:{kind:'sine',ax:0,ay:110,speed:.005}},{x:170,y:-170,w:200,h:16,motion:{kind:'sine',ax:0,ay:110,speed:.005,phase:3.14159}}],ledges:true,hazard:null,
+  },
+  minecraftworld: {
+    key:'minecraftworld',name:'MINECRAFT WORLD',sub:'Split floor · breakable blocks',theme:'coast',backdrop:'blockworld',surface:'blocks',
+    bg:['#4171a6','#7dbbdb','#785538'],accent:'#88c95a',ground:{x:-600,y:0,w:1200,h:44},
+    platforms:[{x:-370,y:-160,w:200,h:24},{x:170,y:-160,w:200,h:24},{x:-90,y:-300,w:180,h:24},
+      {x:-250,y:-80,w:120,h:24,breakHP:18},{x:130,y:-80,w:120,h:24,breakHP:18}],ledges:true,hazard:null,
+  },
+  mishimadojo: {
+    key:'mishimadojo',name:'MISHIMA DOJO',sub:'Breakable dojo walls and ceiling',theme:'shrine',backdrop:'dojo',surface:'wood',
+    bg:['#191011','#543321','#90704d'],accent:'#e5bc7f',ground:{x:-600,y:0,w:1200,h:44},platforms:[],ledges:true,hazard:null,
+  },
+  wreckingcrew: {
+    key:'wreckingcrew',name:'WRECKING CREW',sub:'Demolition charge · floor spikes',theme:'foundry',backdrop:'wrecking',surface:'steel',
+    bg:['#291a24','#79514d','#bd7353'],accent:'#f5ba72',ground:{x:-610,y:0,w:1220,h:44},
+    platforms:[{x:-460,y:-140,w:280,h:18},{x:180,y:-140,w:280,h:18},{x:-190,y:-270,w:380,h:18},{x:-100,y:-400,w:200,h:18}],ledges:true,hazard:null,
+  },
+  flatzonex: {
+    key:'flatzonex',name:'FLAT ZONE X',sub:'Changing scenes · slippery oil',theme:'arena',backdrop:'flatzone',surface:'ink',
+    bg:['#dbd4b9','#c8bfa5','#8f8973'],accent:'#242722',ground:{x:-520,y:0,w:1040,h:44},
+    platforms:[{x:-340,y:-150,w:210,h:14,motion:{kind:'sketch',group:0,hazardMotion:true}},{x:130,y:-150,w:210,h:14,motion:{kind:'sketch',group:0,hazardMotion:true}},{x:-110,y:-250,w:220,h:14,motion:{kind:'sketch',group:1,hazardMotion:true}}],ledges:true,hazard:null,
+  },
+  kingoffighters: {
+    key:'kingoffighters',name:'KING OF FIGHTERS STADIUM',sub:'Ring · launch through the side barriers',theme:'arena',backdrop:'kof',surface:'steel',ringWalls:true,
+    bg:['#10132d','#303b6c','#536894'],accent:'#a8c8ff',ground:{x:-620,y:0,w:1240,h:44},platforms:[],ledges:true,hazard:null,
+  },
+  greatcave: {
+    key:'greatcave',name:'THE GREAT CAVE OFFENSIVE',sub:'Split floor · danger zones',theme:'foundry',surface:'stone',size:'XL',
+    bg:['#17112b','#47315d','#936b76'],accent:'#de98ec',ground:{x:-1000,y:0,w:2000,h:44},
+    platforms:[{x:-760,y:-180,w:300,h:18},{x:-150,y:-180,w:300,h:18},{x:460,y:-180,w:300,h:18},{x:-480,y:-330,w:260,h:18},{x:220,y:-330,w:260,h:18}],ledges:true,hazard:null,
+  },
+  midgar: {
+    key:'midgar',name:'MIDGAR',sub:'Collect materia to summon attacks',theme:'foundry',backdrop:'midgar',surface:'steel',
+    bg:['#091e28','#164552','#587879'],accent:'#75eacb',ground:{x:-590,y:0,w:1180,h:44},
+    platforms:[{x:-335,y:-185,w:200,h:16},{x:135,y:-185,w:200,h:16},{x:-100,y:-330,w:200,h:16}],ledges:true,hazard:null,
+  },
+});
+// Stadium transformations use distinct soft-platform layouts. Slopes and
+// solid terrain are intentionally approximated as one-way platforms.
+function stadiumLayout() {
+  return [
+    {x:-340,y:-176,w:210,h:16,motion:{kind:'forms',forms:['normal','ice']}},
+    {x:130,y:-176,w:210,h:16,motion:{kind:'forms',forms:['normal','ice']}},
+    {x:-105,y:-165,w:210,h:16,motion:{kind:'forms',forms:['electric','grass','water']}},
+    {x:-105,y:-310,w:210,h:16,motion:{kind:'forms',forms:['electric','flying','rock']}},
+    {x:-420,y:-205,w:180,h:16,motion:{kind:'forms',forms:['electric','ground','fire']}},
+    {x:245,y:-150,w:180,h:16,motion:{kind:'forms',forms:['ground','flying','rock','grass']}},
+    {x:-365,y:-260,w:180,h:16,motion:{kind:'forms',forms:['water','fire']}},
+  ];
+}
+Object.assign(STAGES, {
+ battlefield:{key:'battlefield',name:'BATTLEFIELD',sub:'Rising and falling platforms',theme:'island',backdrop:'battlefield',surface:'stone',bg:['#0a1428','#17304f','#2f5f86'],accent:'#7fd0ff',ground:{x:-590,y:0,w:1180,h:44},platforms:[{x:-330,y:-190,w:200,h:18},{x:130,y:-190,w:200,h:18},{x:-100,y:-346,w:200,h:18}],ledges:true,hazard:null},
+ smallbattlefield:{key:'smallbattlefield',name:'SMALL BATTLEFIELD',sub:'Blinking platforms',theme:'island',backdrop:'battlefield',surface:'stone',bg:['#0a1428','#17304f','#2f5f86'],accent:'#7fd0ff',ground:{x:-540,y:0,w:1080,h:44},platforms:[{x:-280,y:-180,w:190,h:18},{x:90,y:-180,w:190,h:18}],ledges:true,hazard:null},
+ bigbattlefield:{key:'bigbattlefield',name:'BIG BATTLEFIELD',sub:'Six platforms · shifting tiers',theme:'island',backdrop:'battlefield',surface:'stone',size:'XL',bg:['#0a1428','#17304f','#2f5f86'],accent:'#7fd0ff',ground:{x:-900,y:0,w:1800,h:44},platforms:[{x:-600,y:-160,w:200,h:18},{x:-100,y:-160,w:200,h:18},{x:400,y:-160,w:200,h:18},{x:-370,y:-290,w:200,h:18},{x:170,y:-290,w:200,h:18},{x:-100,y:-420,w:200,h:18}],ledges:true,hazard:null},
+ finaldestination:{key:'finaldestination',name:'FINAL DESTINATION',sub:'Flat arena · energy strike',theme:'rift',backdrop:'northern',surface:'steel',bg:['#091b28','#164858','#527783'],accent:'#a7f6e7',ground:{x:-620,y:0,w:1240,h:44},platforms:[],ledges:true,hazard:null},
+ pokemonstadium:{key:'pokemonstadium',name:'POKÉMON STADIUM',sub:'Grass · water · fire · rock',theme:'arena',backdrop:'pokemonarena',surface:'steel',bg:['#102638','#276250','#72a176'],accent:'#87f1bc',ground:{x:-590,y:0,w:1180,h:44},platforms:stadiumLayout(),stageForms:['grass','water','fire','rock'],ledges:true,hazard:null},
+ pokemonstadium2:{key:'pokemonstadium2',name:'POKÉMON STADIUM 2',sub:'Electric · flying · ground · ice',theme:'arena',backdrop:'pokemonarena',surface:'steel',bg:['#102638','#276250','#72a176'],accent:'#87f1bc',ground:{x:-610,y:0,w:1220,h:44},platforms:stadiumLayout(),stageForms:['electric','flying','ground','ice'],ledges:true,hazard:null},
+ castlesiege:{key:'castlesiege',name:'CASTLE SIEGE',sub:'Roof · throne room · cavern',theme:'shrine',backdrop:'fantasycastle',surface:'stone',bg:['#211e34','#51455c','#958577'],accent:'#ecd5a0',ground:{x:-590,y:0,w:1180,h:44},stageForms:['interior','cavern'],platforms:[
+  {x:-350,y:-185,w:210,h:18,motion:{kind:'forms',forms:['normal','interior']}},
+  {x:140,y:-185,w:210,h:18,motion:{kind:'forms',forms:['normal','interior']}},
+  {x:-100,y:-315,w:200,h:18,motion:{kind:'forms',forms:['normal']}},
+  {x:-130,y:-275,w:260,h:18,motion:{kind:'forms',forms:['interior']}},
+  {x:-220,y:-145,w:440,h:18,motion:{kind:'forms',forms:['cavern']}}
+ ],ledges:true,hazard:null},
+ arenaferox:{key:'arenaferox',name:'ARENA FEROX',sub:'Changing coliseum layouts',theme:'arena',backdrop:'ruins',surface:'stone',bg:['#2c1d25','#75564b','#ac896c'],accent:'#f4d4a0',ground:{x:-580,y:0,w:1160,h:44},stageForms:['gears','pillars','ruins'],platforms:[
+  {x:-370,y:-175,w:210,h:18,motion:{kind:'forms',forms:['normal','pillars']}},
+  {x:160,y:-175,w:210,h:18,motion:{kind:'forms',forms:['normal','gears']}},
+  {x:-105,y:-300,w:210,h:18,motion:{kind:'forms',forms:['normal','ruins']}},
+  {x:-405,y:-260,w:180,h:18,motion:{kind:'forms',forms:['gears','ruins']}},
+  {x:225,y:-260,w:180,h:18,motion:{kind:'forms',forms:['pillars','ruins']}},
+  {x:-100,y:-150,w:200,h:18,motion:{kind:'forms',forms:['gears','pillars']}}
+ ],ledges:true,hazard:null},
+ springstadium:{key:'springstadium',name:'SPRING STADIUM',sub:'Timed launch pads',theme:'arena',backdrop:'pokemonarena',surface:'steel',bg:['#102638','#276250','#72a176'],accent:'#87f1bc',ground:{x:-600,y:0,w:1200,h:44},platforms:[{x:-120,y:-230,w:240,h:20}],springPads:true,ledges:true,hazard:null},
+ yoshistory:{key:'yoshistory',name:"YOSHI'S STORY",sub:'Storybook island · roaming cloud',theme:'hollow',backdrop:'dreamland',surface:'grass',bg:['#397baf','#87bdc5','#b6d989'],accent:'#f4e07d',ground:{x:-500,y:0,w:1000,h:44},platforms:[{x:-375,y:-170,w:200,h:16},{x:175,y:-170,w:200,h:16},{x:-100,y:-320,w:200,h:16},{x:-80,y:-90,w:160,h:16,motion:{kind:'cloud',hazardMotion:true}}],ledges:true,hazard:null},
+});
+// Wider interpretations for multi-fighter play. Main decks are wider and extra
+// soft platforms add useful routes while retaining each stage's core mechanic.
+STAGES.tortimerisland.size='XL'; STAGES.tortimerisland.ground={x:-900,y:0,w:1800,h:44};
+STAGES.tortimerisland.platforms=[
+  {x:-750,y:-160,w:200,h:16},{x:550,y:-160,w:200,h:16},
+  {x:-430,y:-170,w:200,h:16},{x:230,y:-170,w:200,h:16},{x:-105,y:-310,w:210,h:16},
+];
+STAGES.newdonkcityhall.size='XL'; STAGES.newdonkcityhall.ground={x:-900,y:0,w:1800,h:44};
+STAGES.newdonkcityhall.platforms=[
+  {x:-520,y:-170,w:220,h:16,motion:{kind:'sine',ax:0,ay:110,speed:.005}},
+  {x:300,y:-170,w:220,h:16,motion:{kind:'sine',ax:0,ay:110,speed:.005,phase:Math.PI}},
+  {x:-760,y:-225,w:200,h:16},{x:560,y:-225,w:200,h:16},{x:-115,y:-310,w:230,h:16},
+];
+STAGES.minecraftworld.size='XL'; STAGES.minecraftworld.ground={x:-900,y:0,w:1800,h:44};
+STAGES.minecraftworld.platforms.push({x:-725,y:-165,w:200,h:24},{x:525,y:-165,w:200,h:24});
+STAGES.wreckingcrew.size='XL'; STAGES.wreckingcrew.ground={x:-900,y:0,w:1800,h:44};
+STAGES.wreckingcrew.platforms.push({x:-780,y:-185,w:260,h:18},{x:520,y:-185,w:260,h:18});
+
+// Permanent openings are part of the layout, even with hazards disabled.
+// Each deck segment is a real collision surface; the original ground remains
+// the overall camera/blast-zone bounds and outer ledge reference.
+for (const key of ['minecraftworld','greatcave']) {
+  const stage=STAGES[key], gd=stage.ground, gap={x:-90,w:180};
+  stage.groundGaps=[gap];
+  stage.deckSegments=[{x:gd.x,y:gd.y,w:gap.x-gd.x,h:gd.h},
+    {x:gap.x+gap.w,y:gd.y,w:gd.x+gd.w-gap.x-gap.w,h:gd.h}];
+}
+// Small contact hazards are separate from the permanently split decks.
+STAGES.brinstar.floorSpikes=[{x:-555,y:-32,w:70,h:32},{x:485,y:-32,w:70,h:32}];
+STAGES.wreckingcrew.floorSpikes=[{x:-735,y:-32,w:90,h:32},{x:645,y:-32,w:90,h:32}];
+function deckSegments(stage) { return stage.deckSegments || [stage.ground]; }
+function deckAt(stage,x,lip=0) {
+  const segments=deckSegments(stage);
+  return segments.find((p,i)=>x>p.x-(i===0?lip:0) && x<p.x+p.w+(i===segments.length-1?lip:0)) || null;
+}
+
+// New stage-specific interactions. The Battlefield and meteor additions are
+// original game variations, not features of their Smash originals.
+STAGES.battlefield.platforms.forEach((p,i)=>{p.motion={kind:'sine',ax:0,ay:55,speed:.005,phase:i===2?Math.PI:0,hazardMotion:true};});
+STAGES.smallbattlefield.platforms.forEach((p,i)=>{p.motion={kind:'blink',slot:i,hazardMotion:true};});
+STAGES.bigbattlefield.platforms.forEach((p,i)=>{p.motion={kind:'sine',ax:i%2?55:-55,ay:0,speed:.004,phase:0,hazardMotion:true};});
+STAGES.pokemonstadium.backdropForms={grass:'village',water:'island',fire:'forge',rock:'northern'};
+STAGES.pokemonstadium2.backdropForms={electric:'pokemonarena',flying:'shrine',ground:'blockworld',ice:'northern'};
+STAGES.castlesiege.backdropForms={interior:'dojo',cavern:'forge'};
+// Refresh the older arenas without removing IDs used by classic mode, saved
+// settings or online rooms. Their existing collision layouts remain compatible.
+const REMASTERED_BACKDROPS = {
+ grandrift:'battlefield',colossalstadium:'pokemonarena',horizon:'northern',skyshrine:'shrine',terminal:'northern',foundry:'forge',cometreach:'battlefield',hollow:'shrine',
+ field:'battlefield',bigfield:'battlefield',smallfield:'battlefield',nullshore:'northern',stadium:'pokemonarena',towncity:'cityhall',village:'village',cartoon:'dreamland',cruise:'northern',league:'pokemonarena',range:'ruins',
+ smashville:'village',townandcity:'village',fountain:'fountain',hollowbastion:'fantasycastle',northerncave:'northern',dreamland:'dreamland',brinstar:'forge',greatcave:'northern',
+};
+for (const [key, backdrop] of Object.entries(REMASTERED_BACKDROPS)) {
+  STAGES[key].backdrop=backdrop;
+  if (!STAGES[key].surface) STAGES[key].surface=({city:'wood',hollow:'grass',arena:'steel',range:'stone',foundry:'steel',shrine:'stone',island:'stone',comet:'steel',rift:'steel'})[STAGES[key].theme] || 'stone';
+}
+// Legacy keys stay registered for saves, classic/bonus modes and old clients,
+// but the versus selectors and random pool use their new replacements.
+const LEGACY_STAGE_KEYS = new Set(['grandrift','colossalstadium','horizon','skyshrine','terminal','foundry','cometreach','hollow','field','bigfield','smallfield','nullshore','stadium','towncity','village','cartoon','cruise','league','range']);
+const STAGE_KEYS = Object.keys(STAGES).filter(k => !LEGACY_STAGE_KEYS.has(k));
+
+// Player-facing descriptions describe the implemented behavior, not the source
+// games' unimplemented mechanics. Shared by offline and online stage selectors.
+const STAGE_INFO = {
+ smashville: {about:'A village-style arena with a single soft platform above the main deck.', perk:'The platform glides from side to side and carries fighters standing on it.', hazards:'With hazards off, the platform stays in the center.'},
+ townandcity: {about:'A long town-and-city arena with changing platform formations.', perk:'The three-platform town layout alternates with a two-platform city layout; platforms travel offstage between formations.', hazards:'The platform transitions continue with hazards off.'},
+ fountain: {about:'A dreamlike fountain arena with three elevated platforms.', perk:'The two side platforms rise and sink independently, sometimes disappearing into the floor.', hazards:'With hazards off, both side platforms remain still.'},
+ hollowbastion: {about:'A castle backdrop and a central platform above a flat deck.', perk:'The central platform drifts, splits into two halves, and rejoins.', hazards:'This custom moving layout remains active with hazards off.'},
+ northerncave: {about:'A glowing crater arena with two elevated platforms.', perk:'The platforms travel diagonally, carrying riders along.', hazards:'This custom moving layout remains active with hazards off.'},
+ dreamland: {about:'A bright, three-platform landscape inspired by Dream Land.', perk:'Periodic gusts push fighters, alternating direction over time.', hazards:'Wind is disabled with hazards off.'},
+ brinstar: {about:'A cavern arena above a rising pool of acid.', perk:'Acid damages fighters on contact; warned meteors strike the marked area and floor spikes hurt on contact.', hazards:'Acid, meteors and spikes are disabled with hazards off. Meteors are an original addition.'},
+ tortimerisland: {about:'An XL tropical island with palm-height platforms and extra fighting space.', perk:'Healing fruit periodically drops from the palms; pick it up to recover damage.', hazards:'Fruit requires hazards on, even when ordinary items are off.'},
+ pictochat2: {about:'A sketchbook-style arena with hand-drawn platforms.', perk:'Two different sets of platforms alternate, changing the available routes.', hazards:'With hazards off, the first set remains in place.'},
+ newdonkcityhall: {about:'An XL city-hall arena with a wider deck and elevated scaffolds.', perk:'Two side lifts move up and down, carrying fighters standing on them.', hazards:'The lifts continue moving with hazards off; the main deck does not travel up the building.'},
+ minecraftworld: {about:'An XL block-built grassland with a gap in the center of its floor and multiple soft platforms.', perk:'Attack the two lower block platforms to break them; they stay broken for the match.', hazards:'The breakable blocks are removed with hazards off. The floor gap and other platforms remain.'},
+ mishimadojo: {about:'A flat wooden dojo enclosed by barriers when hazards are enabled.', perk:'Strong launches or repeated attacks break the side walls and ceiling. They repair after a delay once fighters are clear.', hazards:'With hazards off, the barriers are absent.'},
+ wreckingcrew: {about:'An XL construction site with multiple scaffold levels.', perk:'Hit the central demolition charge to light its fuse. Its explosion damages nearby fighters and collapses a scaffold. Outer floor spikes hurt on contact.', hazards:'The charge, collapse and floor spikes require hazards on.'},
+ flatzonex: {about:'A retro LCD-style arena whose platform silhouettes change.', perk:'Platforms alternate between layouts, and a temporary oil spill makes part of the floor slippery.', hazards:'With hazards off, the first layout stays and oil does not appear.'},
+ kingoffighters: {about:'A flat tournament ring with invisible side barriers.', perk:'The walls stop movement and weak launches; a sufficiently strong outward launch breaks through for a KO.', hazards:'The ring barriers remain active even with hazards off.'},
+ greatcave: {about:'An XL crystal cavern with several levels, a central floor gap, and marked danger zones.', perk:'Touching a danger zone deals damage; fighters already at 100% or higher are instantly KO’d.', hazards:'The danger zones are disabled with hazards off; the floor gap remains.'},
+ midgar: {about:'An industrial city arena with three platforms.', perk:'Touch summon materia when it appears to call a warned fire blast, platform lightning, or energy beam against opponents.', hazards:'Materia and summons require hazards on; the collector is spared.'},
+ battlefield: {about:'A three-platform floating battlefield.', perk:'The elevated platforms rise and fall in a custom layout.', hazards:'Platforms stay still with hazards off. This motion is an original addition.'},
+ smallbattlefield: {about:'A compact two-platform battlefield.', perk:'Platforms flash before temporarily disappearing one at a time.', hazards:'Both platforms stay present with hazards off. This is an original addition.'},
+ bigbattlefield: {about:'An XL battlefield with six elevated platforms.', perk:'The platforms shift horizontally to open up changing routes.', hazards:'Platforms stay still with hazards off. This is an original addition.'},
+ finaldestination: {about:'A flat arena with no soft platforms.', perk:'A marked area warns of a periodic energy strike that damages nearby fighters.', hazards:'The strike is disabled with hazards off. This is an original addition.'},
+ pokemonstadium: {about:'A stadium arena that changes between different themed layouts.', perk:'The platform arrangement cycles through grass, water, fire and rock variations.', hazards:'With hazards off, it stays in the standard two-platform layout.'},
+ pokemonstadium2: {about:'A stadium with elemental transformations.', perk:'Electric belts push outward, flying creates an updraft, and ice makes movement slippery; ground changes the layout.', hazards:'With hazards off, it stays in its standard layout without elemental effects.'},
+ castlesiege: {about:'A castle arena with roof, interior and cavern-inspired formations.', perk:'The soft-platform arrangement cycles between the three formations.', hazards:'With hazards off, it stays in the roof layout.'},
+ arenaferox: {about:'A stone coliseum with changing platforms.', perk:'The arena cycles through several different soft-platform layouts.', hazards:'With hazards off, the initial layout remains.'},
+ springstadium: {about:'A stadium with an elevated center platform and pads at the deck edges.', perk:'While the edge and center-platform pads are active, hold jump on one for an extra-high jump; a short tap does not boost.', hazards:'The pads are inactive with hazards off.'},
+ yoshistory: {about:'A compact storybook island with three raised platforms.', perk:'A roaming cloud offers a moving extra platform and can carry fighters.', hazards:'The cloud does not appear with hazards off.'},
+};
 
 /* ============================================================
    ITEMS  (GDD §8)
@@ -804,7 +1050,7 @@ const DEFAULT_RULES = {
   teamAssign: [0, 1, 0, 1],
   teamAttack: false,
   items: 'medium',
-  stage: 'skyshrine',
+  stage: 'battlefield',
   stageRandom: false,
   aiLevel: 5,
   hazards: true,

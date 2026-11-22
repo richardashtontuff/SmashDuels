@@ -319,15 +319,17 @@ class Item {
     this.life--;
     const gd = match.stage.ground;
     if (!this.onGround) {
+      const oldY = this.y;
       this.vy = Math.min(this.vy + 0.45, 12);
       this.x += this.vx; this.y += this.vy;
       this.rot += this.vr;
       // land on platform/ground — the deck uses the same lip the fighters do, so
       // an item can come to rest beside the stage instead of tunnelling past it
-      if (this.y >= gd.y - 8 && this.x > gd.x - DECK_LIP && this.x < gd.x + gd.w + DECK_LIP) {
+      if (this.y >= gd.y - 8 && oldY <= gd.y - 6 && deckAt(match.stage,this.x,DECK_LIP)) {
         this.y = gd.y - 8; this.onGround = true; this.onPlatform = null; this.vx *= 0.4; this.vy = 0;
       }
       for (const p of match.stage.platforms) {
+        if (p.active === false) continue;
         const px = p.cx !== undefined ? p.cx : p.x, py = p.cy !== undefined ? p.cy : p.y;
         if (this.vy > 0 && this.x > px && this.x < px + p.w && this.y > py - 6 && this.y < py + 20) {
           this.y = py - 8; this.onGround = true; this.onPlatform = p; this.vy = 0;
@@ -340,13 +342,15 @@ class Item {
          down on the Ember Foundry lift hung in mid-air for its whole life — and on
          the way out of the pillar stage, sat on nothing at all. */
       const p = this.onPlatform;
-      if (p) {
+      if (p && p.active === false) {
+        this.onGround = false; this.onPlatform = null; this.vy = Math.max(this.vy, 0.4);
+      } else if (p) {
         this.x += p.dx || 0; this.y += p.dy || 0;
         const px = p.cx !== undefined ? p.cx : p.x, py = p.cy !== undefined ? p.cy : p.y;
         if (!(this.x > px && this.x < px + p.w) || Math.abs(this.y - (py - 8)) > 14) {
           this.onGround = false; this.onPlatform = null; this.vy = Math.max(this.vy, 0.4);
         }
-      } else if (!(this.x > gd.x - DECK_LIP && this.x < gd.x + gd.w + DECK_LIP) || Math.abs(this.y - (gd.y - 8)) > 14) {
+      } else if (!(deckAt(match.stage,this.x,DECK_LIP)) || Math.abs(this.y - (gd.y - 8)) > 14) {
         this.onGround = false; this.onPlatform = null; this.vy = Math.max(this.vy, 0.4);
       }
       this.vx *= 0.9;
@@ -578,8 +582,9 @@ class Projectile {
     this.rot += 0.3;
     if ((this.kind === 'bomb' || this.kind === 'thrown' || this.kind === 'fallingStar') && this.vy > 0) {
       const gd = match.stage.ground;
-      const surfaces = [gd, ...match.stage.platforms];
+      const surfaces = [...deckSegments(match.stage), ...match.stage.platforms];
       for (const p of surfaces) {
+        if (p.active === false) continue;
         const x = p.cx !== undefined ? p.cx : p.x, y = p.cy !== undefined ? p.cy : p.y;
         if (this.x >= x && this.x <= x + p.w && oldY + this.size <= y && this.y + this.size >= y) {
           this.y = y - this.size; this.dead = true; break;
@@ -656,7 +661,8 @@ class Projectile {
     const oldY = this.y;
     this.x += this.vx; this.y += this.vy;
     let impactY = Infinity;
-    for (const p of [match.stage.ground, ...match.stage.platforms]) {
+    for (const p of [...deckSegments(match.stage), ...match.stage.platforms]) {
+      if (p.active === false) continue;
       const x = p.cx !== undefined ? p.cx : p.x, y = p.cy !== undefined ? p.cy : p.y;
       if (this.x >= x && this.x <= x + p.w && oldY + this.size <= y && this.y + this.size >= y)
         impactY = Math.min(impactY, y);
@@ -722,6 +728,8 @@ class Projectile {
     // `life` is a fixed tick budget, not a hit count: contacts never end the wave.
     if (this.t > this.life) { this.dead = true; return; }
     const oldY = this.y;
+    if (this.surface === match.stage.ground && match.stage.deckSegments) this.surface = deckAt(match.stage,this.x);
+    if (this.surface && this.surface.active === false) this.surface = null;
     if (this.surface) {
       const p = this.surface;
       this.x += this.vx + (p.dx || 0);
@@ -734,9 +742,10 @@ class Projectile {
     } else {
       this.x += this.vx; this.vy = Math.min(14, this.vy + .65); this.y += this.vy;
       // Falling from a platform or cast in midair: catch the first surface below.
-      const surfaces = [match.stage.ground, ...match.stage.platforms];
+      const surfaces = [...deckSegments(match.stage), ...match.stage.platforms];
       let landing = null;
       for (const p of surfaces) {
+        if (p.active === false) continue;
         if (this.x >= p.x && this.x <= p.x+p.w && oldY <= p.y && this.y >= p.y &&
             (!landing || p.y < landing.y)) landing = p;
       }
@@ -826,6 +835,11 @@ class Mine {
   }
   update(match) {
     this.t++;
+    // Mines placed over an opening fall instead of hovering on invisible ground.
+    if (match.stage.groundGaps && !deckAt(match.stage,this.x)) {
+      this.vy=Math.min((this.vy || 0)+.45,12);this.y+=this.vy;
+      if (this.y>match.blast.bottom) { this.dead=true;return; }
+    }
     if (this.t > this.life) this.dead = true;
     if (this.t < this.armT) return;
     for (const f of match.fighters) {

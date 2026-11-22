@@ -8,7 +8,8 @@
 <link rel="stylesheet" href="css/ui-refresh.css?v=K52">
 <link rel="stylesheet" href="css/ui-fx.css?v=K52">
 <link rel="stylesheet" href="css/fighter-profiles.css?v=K52">
-<link rel="stylesheet" href="css/online.css?v=3">
+<link rel="stylesheet" href="css/online.css?v=4">
+<link rel="stylesheet" href="css/stage-info.css?v=1">
 </head>
 <body>
 <div id="app">
@@ -285,7 +286,7 @@
         <div id="online-stage-section" class="online-stage-panel" hidden>
           <div class="online-section-title"><span id="online-stage-heading">03 / CHOOSE YOUR ARENA</span><span id="online-stage-hint"></span></div>
           <div id="online-stages" class="online-stages" aria-label="Choose an arena"></div>
-          <div class="online-stage-footer"><div class="online-current-arena"><canvas id="online-selected-stage" width="180" height="90" aria-hidden="true"></canvas><div><span>LIVE ARENA PICK</span><strong id="online-stage-current"></strong></div></div><button id="online-vote" hidden>LOCK IN STAGE ▶</button></div>
+          <div class="online-stage-footer"><div class="online-current-arena"><canvas id="online-selected-stage" width="180" height="90" aria-hidden="true"></canvas><div><span>LIVE ARENA PICK</span><strong id="online-stage-current"></strong></div></div><div class="online-stage-actions"><button id="online-hazards" type="button" hidden aria-pressed="false">HAZARDS: OFF</button><button id="online-vote" hidden>LOCK IN STAGE ▶</button></div></div>
         </div>
       </div>
     </div>
@@ -306,16 +307,27 @@
   </div>
 </div>
 
-<script src="js/core.js?v=K52"></script>
-<script src="js/data.js?v=K52"></script>
-<script src="js/render.js?v=K52"></script>
-<script src="js/fighter.js?v=K52"></script>
-<script src="js/items.js?v=K52"></script>
-<script src="js/ai.js?v=K52"></script>
-<script src="js/match.js?v=K52"></script>
-<script src="js/modes.js?v=K52"></script>
+<div id="stage-info-dialog" class="stage-info-overlay" hidden>
+  <section class="stage-info-panel" tabindex="0" role="dialog" aria-modal="true" aria-labelledby="stage-info-title" aria-describedby="stage-info-about">
+    <div class="stage-info-heading"><span id="stage-info-size"></span><button type="button" id="stage-info-close" aria-label="Close stage information">×</button></div>
+    <h2 id="stage-info-title"></h2>
+    <p id="stage-info-about"></p>
+    <h3>STAGE ABILITY</h3><p id="stage-info-perk"></p>
+    <h3>HAZARD SETTINGS</h3><p id="stage-info-hazards"></p>
+    <p class="stage-info-note">Inspired by classic arenas; mechanics are adapted for Rift Rumble.</p>
+  </section>
+</div>
+<script src="js/core.js?v=K59"></script>
+<script src="js/data.js?v=K60"></script>
+<script src="js/render.js?v=K60"></script>
+<script src="js/fighter.js?v=K60"></script>
+<script src="js/items.js?v=K60"></script>
+<script src="js/ai.js?v=K60"></script>
+<script src="js/match.js?v=K60"></script>
+<script src="js/modes.js?v=K58"></script>
 <script src="js/cloud.js?v=K52"></script>
-<script src="js/online.js?v=3"></script>
-<script src="js/ui.js?v=K54"></script>
+<script src="js/stage-info.js?v=1"></script>
+<script src="js/online.js?v=9"></script>
+<script src="js/ui.js?v=K60"></script>
 </body>
 </html>

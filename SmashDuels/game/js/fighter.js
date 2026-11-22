@@ -380,6 +380,10 @@ class Fighter {
      ============================================================ */
   handleMovement(match) {
     const st = this.def.stats;
+    const oil=match.stage.mechanic && match.stage.mechanic.oil;
+    const slippery=match.rules.hazards && this.onGround &&
+      (match.stage.form === 'ice' || (oil && !this.onPlatform && Math.abs(this.x-oil.x)<oil.w/2));
+    const traction = st.traction * (slippery ? .22 : 1);
     const inp = this.input;
     const h = this.horiz();
     const spd = this.speedMul();
@@ -391,7 +395,7 @@ class Fighter {
       // A raised shield owns ground movement until it is released, jumped out
       // of, or turned into a dodge by updateShield.
       if (this.shieldHP > 0 && this.state === 'shield') {
-        this.vx = approach(this.vx, 0, st.traction * 1.8);
+        this.vx = approach(this.vx, 0, traction * 1.8);
         this.turnT = 0; this.endDash();
         return;
       }
@@ -404,7 +408,7 @@ class Fighter {
       // crouch
       if (inp.down && this.state !== 'land' && !this.held) {
         this.state = 'crouch';
-        this.vx = approach(this.vx, 0, st.traction * 2.6);
+        this.vx = approach(this.vx, 0, traction * 2.6);
         this.turnT = 0; this.endDash();
         return;
       }
@@ -439,20 +443,20 @@ class Fighter {
         if (this.turnT <= 0 && this.vx * h < -0.2) this.turnT = SKID_FRAMES;
         if (this.turnT > 0 && this.vx * h < -0.2) {
           // Push toward the new run speed instead of braking to a walk first.
-          this.vx = approach(this.vx, h * st.run * spd, st.traction * 4.5);
+          this.vx = approach(this.vx, h * st.run * spd, traction * 4.5);
           this.state = 'turn';
         } else {
           this.turnT = 0;
           const running = this.runArmed;
           const target = h * (running ? st.run : st.walk) * spd;
-          this.vx = approach(this.vx, target, st.traction * (running ? 1.9 : 1.7));
+          this.vx = approach(this.vx, target, traction * (running ? 1.9 : 1.7));
           this.state = speed < 0.25 ? (this.shieldHP > 0 ? 'shield' : 'idle')
             : running ? 'run' : (Math.abs(this.vx) > st.walk * 0.7 ? (running ? 'run' : 'walk') : 'walk');
         }
       } else {
         this.turnT = 0;
         if (this.dashT <= 0) this.runArmed = false;
-        this.vx = approach(this.vx, 0, st.traction * 1.4);
+        this.vx = approach(this.vx, 0, traction * 1.4);
         if (this.state !== 'land') this.state = Math.abs(this.vx) < 0.25 ? (this.shieldHP > 0 ? 'shield' : 'idle') : 'walk';
       }
       // jumps (jump button only — up-tap jump removed so up+attack can be utilts)
@@ -486,6 +490,10 @@ class Fighter {
     if (this.onGround) {
       this.consume('jump');
       this.vy = -st.jumpV * this.jumpMul();
+      // A held jump on an active stadium pad is boosted; a short tap is not.
+      const pad=match.stage.springPads && match.rules.hazards && match.frame%600<300 &&
+        (this.onPlatform === match.stage.platforms[0] || (!this.onPlatform && Math.abs(this.x)>match.stage.ground.w/2-140));
+      this.springJumpT=pad ? 4 : 0;
       this.onGround = false; this.onPlatform = null;
       this.fastfalled = false; this.usedAirDodge = false;
       this.jumpsLeft = st.jumps; this.airJumpsLeft = st.airJumps;
@@ -514,6 +522,12 @@ class Fighter {
 
   applyPhysics(match) {
     const st = this.def.stats;
+    if (this.springJumpT > 0) {
+      if (!this.input.jump || this.hitstun>0 || this.state!=='jump') this.springJumpT=0;
+      else if (--this.springJumpT===0) {
+        this.vy=Math.min(this.vy,-23); match.fx.ring(this.x,this.y,'#ffd55e',50,18);
+      }
+    }
     const gScale = this.buffs.metal > 0 ? 1.9 : 1;
     let maxFall = (this.fastfalled ? st.fastfall : st.fall) * (this.buffs.bunny > 0 ? 0.85 : 1) * gScale;
     if (this.state === 'helpless') maxFall *= 1.15;
@@ -532,6 +546,8 @@ class Fighter {
     const oldY = this.y;
     this.x += this.vx;
     this.y += this.vy;
+    if (match.stage.ringWalls && match.resolveRingWall(this)) return;
+    if (match.stage.key==='mishimadojo' && match.rules.hazards) match.resolveDojoWalls(this);
 
     /* Ride the platform.  A fighter standing on a mover has to inherit its travel
        for the tick, otherwise the Ember Foundry lift and the Comet Reach blocks
@@ -540,7 +556,7 @@ class Fighter {
        that one-frame bounce every time the block changed direction is what read as
        "collision problems with the platforms".  Applied before the stage tests so
        the surface check below still owns the final position. */
-    if (this.onPlatform) {
+    if (this.onPlatform && this.onPlatform.active !== false) {
       const p = this.onPlatform;
       if (p.dx || p.dy) { this.x += p.dx || 0; this.y += p.dy || 0; }
     }
@@ -554,7 +570,7 @@ class Fighter {
 
     {
       // main platform top — solid from above only, never snapped up from below
-      if (this.x > gd.x - DECK_LIP && this.x < gd.x + gd.w + DECK_LIP) {
+      if (deckAt(stage, this.x, DECK_LIP)) {
         const top = gd.y;
         const crossed = this.y - this.vy <= top + 2;   // was above the surface last frame
         if (this.y >= top - 1 && this.vy >= 0 && crossed) {
@@ -570,6 +586,7 @@ class Fighter {
     // soft platforms: a drop-through ignores these, never the deck above
     if (this.dropThroughT <= 0) {
       for (const p of stage.platforms) {
+        if (p.active === false) continue;
         if (this.respawnDropT > 0) break;              // drop-in ignores soft platforms
         const px = p.cx !== undefined ? p.cx : p.x, py = p.cy !== undefined ? p.cy : p.y;
         if (this.x > px - 4 && this.x < px + p.w + 4 && !(this.input.down && this.state === 'crouch')) {
@@ -585,13 +602,13 @@ class Fighter {
     // under the stage to a distant side wall.
     const underside = gd.y + gd.h + 14;
     if (!this.isMob && oldY >= underside && this.y < underside && this.vy < 0 &&
-        this.x > gd.x && this.x < gd.x + gd.w) {
+        deckAt(stage, this.x)) {
       this.y = underside; this.vy = 0; this.onGround = false; this.onPlatform = null;
     }
     this.prevY = this.y;
 
     // the stage slab is solid from the sides; see confine()
-    this.confine(gd);
+    for (const segment of deckSegments(stage)) this.confine(segment);
   }
 
   /* Keep a fighter out of the stage slab.
@@ -1211,7 +1228,7 @@ class Fighter {
           s.projFired = true;
           match.spawnProjectile({ owner:this, x:this.x + this.facing * 55 * this.scale, y:this.y,
             vx:this.facing * sp.waveSpeed, vy:0, kind:'tidewave',
-            surface:this.onGround ? (this.onPlatform || match.stage.ground) : null,
+            surface:this.onGround ? (this.onPlatform || deckAt(match.stage,this.x,DECK_LIP)) : null,
             life:sp.waveLife || sp.minWaveLife, fadeFrames:18, rehit:sp.rehit,
             damage:sp.damage, bkb:sp.bkb, kbs:sp.kbs,
             angle:this.facing < 0 ? 180-sp.angle : sp.angle, color:this.pal.accent });
@@ -1493,8 +1510,9 @@ class Fighter {
   // (including below the island) can use a nearby ledge instead.
   hasSurfaceBelow(stage) {
     const gd = stage.ground;
-    if (this.x >= gd.x && this.x <= gd.x + gd.w && this.y <= gd.y) return true;
+    if (deckAt(stage,this.x) && this.y <= gd.y) return true;
     return stage.platforms.some(p => {
+      if (p.active === false) return false;
       const x = p.cx !== undefined ? p.cx : p.x, y = p.cy !== undefined ? p.cy : p.y;
       return this.x >= x && this.x <= x + p.w && this.y <= y;
     });
@@ -1834,6 +1852,8 @@ class Fighter {
     const fs = this.def.finalSmash;
     const t = this.finalT;
     this.vx *= 0.96;
+    // A final smash may leave a solid segment and drift over a floor opening.
+    if (this.onGround && !this.onPlatform && !deckAt(match.stage,this.x,DECK_LIP)) this.onGround=false;
     // a grounded final smash hovers: never sink through the deck
     const grounded = this.onGround || this.onPlatform;
     if (grounded) { this.vy = 0; }
@@ -1841,7 +1861,7 @@ class Fighter {
     this.x += this.vx; this.y += this.vy;
     // hard floor guard for every surface we could be standing on
     const gd = match.stage.ground;
-    if (this.x > gd.x - 16 && this.x < gd.x + gd.w + 16 && this.y > gd.y) {
+    if (deckAt(match.stage,this.x,16) && this.y > gd.y) {
       this.y = gd.y; this.vy = 0; this.onGround = true;
     }
     if (this.onPlatform) {

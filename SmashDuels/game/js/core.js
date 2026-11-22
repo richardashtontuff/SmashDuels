@@ -71,6 +71,7 @@ const INPUT = {
   },
   init() {
     addEventListener('keydown', e => {
+      if (document.getElementById('stage-info-dialog') && !document.getElementById('stage-info-dialog').hidden) return;
       const editing = e.target && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
       if (editing) return;
       if (!e.repeat) { INPUT.pressed[e.code] = true; }

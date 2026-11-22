@@ -20,11 +20,11 @@ const Modes = (() => {
       losses: 0,
       alive: true,     // two losses ends the run
       stages: [
-        { label: 'STAGE 1 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 1) % CLASSIC_ORDER.length], stage: 'skyshrine', lives: 2 },
-        { label: 'STAGE 2 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 2) % CLASSIC_ORDER.length], stage: 'hollow', lives: 2 },
-        { label: 'STAGE 3 · BRAWL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 3) % CLASSIC_ORDER.length], stage: 'range', lives: 2, doubles: true },
-        { label: 'STAGE 4 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 4) % CLASSIC_ORDER.length], stage: 'cometreach', lives: 2 },
-        { label: 'FINAL · BOSS', enemy: 'grim', stage: 'foundry', lives: 3, boss: true },
+        { label: 'STAGE 1 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 1) % CLASSIC_ORDER.length], stage: 'battlefield', lives: 2 },
+        { label: 'STAGE 2 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 2) % CLASSIC_ORDER.length], stage: 'dreamland', lives: 2 },
+        { label: 'STAGE 3 · BRAWL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 3) % CLASSIC_ORDER.length], stage: 'arenaferox', lives: 2, doubles: true },
+        { label: 'STAGE 4 · DUEL', enemy: CLASSIC_ORDER[(CLASSIC_ORDER.indexOf(fighterKey) + 4) % CLASSIC_ORDER.length], stage: 'northerncave', lives: 2 },
+        { label: 'FINAL · BOSS', enemy: 'grim', stage: 'brinstar', lives: 3, boss: true },
       ],
     };
     launchClassicStage();

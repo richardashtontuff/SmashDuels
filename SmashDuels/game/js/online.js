@@ -20,18 +20,23 @@ const Online = (() => {
       button.innerHTML=`<img src="assets/portraits/${key}_base.png?v=${BUILD}" alt=""><span class="fmeta"><b>${f.name}</b><small>${f.title}</small></span><span class="online-tile-players"></span>`;
       button.addEventListener('click',()=>send({type:'character',key}));el('fighters').append(button);
     }
-    for(const [key,stage] of Object.entries(STAGES)){
+    for(const key of STAGE_KEYS){
+      const stage=STAGES[key];
       const button=document.createElement('button');button.type='button';button.className='scell';button.dataset.key=key;button.style.setProperty('--c',stage.accent);
       button.innerHTML=`<canvas width="260" height="130" aria-hidden="true"></canvas><b>${stage.name}</b><small>${stage.size==='XL'?'XL ARENA':'STANDARD'}</small><span class="online-stage-players"></span>`;
       drawStage(button.querySelector('canvas'),stage);
-      button.addEventListener('click',()=>{if(!room)return;if(room.mode==='private')send({type:'stage',key});else send({type:'stage_preview',key});});el('stages').append(button);
+      button.addEventListener('click',()=>{if(!room)return;if(room.mode==='private')send({type:'stage',key});else send({type:'stage_preview',key});});
+      const tile=document.createElement('div');tile.className='stage-tile';
+      const info=document.createElement('button');info.type='button';info.className='stage-info-button';info.textContent='i';info.setAttribute('aria-label',`About ${stage.name}`);
+      info.addEventListener('click',()=>StageInfo.open(key,info));tile.append(button,info);el('stages').append(tile);
     }
     el('back').onclick=()=>{leave();UI.openTitle();};
     el('leave').onclick=()=>{leave();entry();status('Connect to play online.');};
     el('queue').onclick=()=>connect({type:'queue'});
     el('create').onclick=()=>connect({type:'create'});
     el('join').onclick=()=>connect({type:'join',code:el('code').value});
-    el('vote').onclick=()=>{const me=room && room.players.find(p=>p.id===room.id);if(me)send({type:'vote',key:me.stageChoice||'skyshrine'});};
+    el('hazards').onclick=()=>{if(room && room.mode==='private' && room.id===room.host)send({type:'hazards',enabled:!room.hazards});};
+    el('vote').onclick=()=>{const me=room && room.players.find(p=>p.id===room.id);if(me)send({type:'vote',key:me.stageChoice||'battlefield'});};
     el('start').onclick=()=>send({type:'start'});
     window.addEventListener('blur',()=>{
       for (const key of keys) { const code=INPUT.map.p1[key]; INPUT.keys[code]=false; INPUT.pressed[code]=false; }
@@ -41,13 +46,18 @@ const Online = (() => {
   function drawStage(cv,s){
     const ctx=cv.getContext('2d'), W=cv.width,H=cv.height;
     const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,s.bg[0]);g.addColorStop(.6,s.bg[1]);g.addColorStop(1,s.bg[2]);ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    cv.dataset.thumbKey=s.key;
+    const img=Backdrop.image(s);
+    if(img && img.complete && img.naturalWidth)Backdrop.cover(ctx,img,W,H);
+    else if(img && !img.complete)img.addEventListener('load',()=>{if(cv.dataset.thumbKey===s.key)drawStage(cv,s);},{once:true});
     const gd=s.ground,sx=W/Math.max(1500,gd.w+250),ox=W/2;
-    ctx.fillStyle=shade(s.bg[2],.2);ctx.fillRect(ox+gd.x*sx,H*.72,gd.w*sx,12);
-    ctx.fillStyle=withAlpha(s.accent,.9);ctx.fillRect(ox+gd.x*sx,H*.72-2,gd.w*sx,2.5);
-    s.platforms.forEach(p=>{ctx.fillStyle=shade(s.bg[2],.3);ctx.fillRect(ox+p.x*sx,H*.72-(-p.y)*sx*.9,p.w*sx,4);ctx.fillStyle=withAlpha(s.accent,.7);ctx.fillRect(ox+p.x*sx,H*.72-(-p.y)*sx*.9-1,p.w*sx,1.6);});
+    for(const part of deckSegments(s)) {ctx.fillStyle=shade(s.bg[2],.2);ctx.fillRect(ox+part.x*sx,H*.72,part.w*sx,12);
+      ctx.fillStyle=withAlpha(s.accent,.9);ctx.fillRect(ox+part.x*sx,H*.72-2,part.w*sx,2.5);}
+    for(const spike of s.floorSpikes || []) {ctx.fillStyle='#ff9a50';ctx.fillRect(ox+spike.x*sx,H*.72-5,spike.w*sx,3);}
+    s.platforms.forEach(p=>{if(p.motion && ((p.motion.kind==='forms' && !p.motion.forms.includes('normal')) || (p.motion.kind==='sketch' && p.motion.group!==0)))return;ctx.fillStyle=shade(s.bg[2],.3);ctx.fillRect(ox+p.x*sx,H*.72-(-p.y)*sx*.9,p.w*sx,4);ctx.fillStyle=withAlpha(s.accent,.7);ctx.fillRect(ox+p.x*sx,H*.72-(-p.y)*sx*.9-1,p.w*sx,1.6);});
     ctx.globalAlpha=.5;for(let i=0;i<18;i++){ctx.fillStyle=i%3?s.accent:'#fff';ctx.fillRect(i*97%W,i*53%(H*.6),1.4,1.4);}ctx.globalAlpha=1;
   }
-  function entry(){room=null;el('entry').hidden=false;el('room').hidden=true;document.querySelector('.online-shell').classList.remove('in-room');}
+  function entry(){StageInfo.close();room=null;el('entry').hidden=false;el('room').hidden=true;document.querySelector('.online-shell').classList.remove('in-room');}
   function open(){setup();entry();status('Connect to play online.');UI.show('screen-online');}
   function leave(){playing=false;room=null;lastMask=-1;if(timer){clearInterval(timer);timer=null;}if(socket){send({type:'leave'});const old=socket;socket=null;old.close();}}
   function connect(first){
@@ -104,15 +114,20 @@ const Online = (() => {
     Array.from(el('palettes').children).forEach((b,i)=>{b.classList.toggle('on',i===me.palIdx);b.setAttribute('aria-pressed',String(i===me.palIdx));});
     el('stage-heading').textContent=voting?'01 / VOTE FOR AN ARENA':'03 / THE ARENA';
     el('stage-hint').textContent=voting?'BOTH PLAYERS VOTE':lobby?(host?'HOST CHOOSES THE STAGE':'HOST CONTROLS THE STAGE'):'STAGE SELECTED';
+    if (select) StageInfo.close();
     el('stages').hidden=select;
-    for(const button of el('stages').children){const key=button.dataset.key,selected=voting?me.stageChoice===key:room.stage===key;
+    for(const button of el('stages').querySelectorAll('.scell')){const key=button.dataset.key,selected=voting?me.stageChoice===key:room.stage===key;
       button.classList.toggle('sel',selected);button.disabled=select||(lobby&&!host)||(voting&&!!me.vote);button.setAttribute('aria-pressed',String(selected));
       button.setAttribute('aria-label',`${STAGES[key].name}${selected?', selected':''}`);
       const badges=voting?room.players.flatMap((p,i)=>p.stageChoice===key?[playerBadge(i,'P'+(i+1)+(p.vote?' ✓':''))]:[]):[];
       button.querySelector('.online-stage-players').replaceChildren(...badges);
     }
-    drawStage(el('selected-stage'),STAGES[voting?(me.stageChoice||'skyshrine'):room.stage]);
-    el('stage-current').textContent=voting?`YOUR VOTE: ${STAGES[me.stageChoice||'skyshrine'].name}${me.vote?' · LOCKED':''}`:`SELECTED ARENA: ${STAGES[room.stage].name}`;
+    drawStage(el('selected-stage'),STAGES[voting?(me.stageChoice||'battlefield'):room.stage]);
+    el('stage-current').textContent=voting?`YOUR VOTE: ${STAGES[me.stageChoice||'battlefield'].name}${me.vote?' · LOCKED':''}`:`SELECTED ARENA: ${STAGES[room.stage].name}`;
+    el('hazards').hidden=!lobby;el('hazards').disabled=!host;
+    el('hazards').textContent=`HAZARDS: ${room.hazards?'ON':'OFF'}`;
+    el('hazards').setAttribute('aria-pressed',String(!!room.hazards));
+    el('hazards').setAttribute('aria-label',`Stage hazards ${room.hazards?'on':'off'}${host?', toggle':', host controls'}`);
     el('vote').hidden=!voting;el('vote').disabled=!!me.vote;el('vote').textContent=me.vote?'STAGE LOCKED ✓':'LOCK IN STAGE ▶';
     el('start').hidden=!(lobby&&host);el('start').disabled=room.players.length<2 || !room.players.every(p=>p.inLobby);
     if(timer)clearInterval(timer);
@@ -127,6 +142,10 @@ const Online = (() => {
     const m=Game.getMatch();if(!m)return;
     for(const k of ['frame','time','state','stateT','overT','announcement'])m[k]=s[k];
     s.fighters.forEach((f,i)=>{const grab=f.grabbing;Object.assign(m.fighters[i],f);m.fighters[i].grabbing=grab===null?null:m.fighters[grab];});
+    m.stage.form=s.stageForm || 'normal';
+    if(s.stageMechanic)m.stage.mechanic=s.stageMechanic;
+    if(s.stageHazard)m.stage.hazard=s.stageHazard;
+    m.items=(s.items||[]).map(p=>Object.assign(new Item(p.type,p.x,p.y,m),p));
     s.platforms.forEach((p,i)=>Object.assign(m.stage.platforms[i],p));
     m.projectiles=s.projectiles.map(p=>Object.assign(new Projectile(p),p));
     m.mines=s.mines.map(p=>Object.assign(new Mine(p),p));

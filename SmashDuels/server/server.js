@@ -12,15 +12,18 @@ const root = path.resolve(__dirname, '../game');
 const MIME = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.webp':'image/webp','.ico':'image/x-icon'};
 const KEYS = ['left','right','up','down','attack','special','jump','shield','grab'];
 const fighterFields = ['x','y','vx','vy','state','stateT','animT','actionT','action','facing','damage','stocks','eliminated','stats','buffs','invincT','spawnProtect','respawnT','ledgeInvuln','ledge','hitlag','hitT','stunT','dashT','rollDir','groundDist','shakeX','shakeY','shieldHP','charging','chargeT','tauntIdx','hasSmashBall','finalActive','vineGrabbed','fastfalled','onGround'];
+const itemFields = ['type','x','y','vx','vy','rot','life','spawnT','onGround','dead','stageFruit','bobT','cooldown'];
 const projectileFields = ['x','y','vx','vy','damage','bkb','kbs','angle','life','color','size','kind','t','rot','fadeFrames','chargePower','dead'];
 const copyFields = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k,o[k]]));
 function snapshot(m) {
   return {frame:m.frame,time:m.time,state:m.state,stateT:m.stateT,overT:m.overT,announcement:m.announcement,
     fighters:m.fighters.map(f=>({...copyFields(f,fighterFields),grabbing:f.grabbing ? f.grabbing.id : null})),
     projectiles:m.projectiles.map(p=>copyFields(p,projectileFields)),
+    items:m.items.filter(it=>it.stageFruit && !it.dead).map(it=>copyFields(it,itemFields)),
     mines:m.mines.map(p=>copyFields(p,['x','y','t','life','dead'])),
     summons:m.summons.map(p=>copyFields(p,['x','y','t','life','kind','facing','dead'])),
-    platforms:m.stage.platforms.map(p=>({x:p.x,y:p.y,cx:p.cx,cy:p.cy,dx:p.dx,dy:p.dy})),
+    stageForm:m.stage.form,stageMechanic:m.stage.mechanic,stageHazard:m.stage.hazard,
+    platforms:m.stage.platforms.map(p=>({x:p.x,y:p.y,cx:p.cx,cy:p.cy,dx:p.dx,dy:p.dy,active:p.active,warning:p.warning})),
     fx:{parts:m.fx.parts, texts:m.fx.texts, rings:m.fx.rings, arcs:m.fx.arcs, lines:m.fx.lines},
     winner:m.winner ? m.winner.map(f=>f.id) : null};
 }
@@ -43,13 +46,13 @@ function createServer(options={}) {
   const wss=new WebSocketServer({server,path:'/online',maxPayload:65536,perMessageDeflate:false});
   const send=(p,msg)=>{if(p.ws.readyState===WebSocket.OPEN && p.ws.bufferedAmount<1024*1024)p.ws.send(JSON.stringify(msg));};
   const notify=(room,msg)=>room.players.forEach(p=>send(p,msg));
-  function state(room) { for(const p of room.players)send(p,{type:'room',id:p.id,mode:room.mode,code:room.code,host:room.host.id,phase:room.phase,stage:room.stage,deadline:room.deadline||null,players:room.players.map(x=>({id:x.id,character:x.character,palIdx:x.palIdx,inLobby:x.inLobby,vote:x.vote||null,stageChoice:x.stageChoice||null}))}); }
+  function state(room) { for(const p of room.players)send(p,{type:'room',id:p.id,mode:room.mode,code:room.code,host:room.host.id,phase:room.phase,stage:room.stage,hazards:room.hazards,deadline:room.deadline||null,players:room.players.map(x=>({id:x.id,character:x.character,palIdx:x.palIdx,inLobby:x.inLobby,vote:x.vote||null,stageChoice:x.stageChoice||null}))}); }
   function makeRoom(mode,p) {
     let code;do{code=crypto.randomBytes(5).toString('hex').slice(0,6).toUpperCase()}while(rooms.has(code));
-    const room={code,mode,players:[],host:p,phase:mode==='queue'?'voting':'lobby',stage:'skyshrine',timer:null,tick:null};rooms.set(code,room);join(room,p);return room;
+    const room={code,mode,players:[],host:p,phase:mode==='queue'?'voting':'lobby',stage:'battlefield',hazards:false,timer:null,tick:null};rooms.set(code,room);join(room,p);return room;
   }
   function join(room,p){
-    p.room=room;p.vote=null;p.stageChoice='skyshrine';p.palIdx=room.players.length%6;p.inLobby=true;
+    p.room=room;p.vote=null;p.stageChoice='battlefield';p.palIdx=room.players.length%6;p.inLobby=true;
     room.players.push(p);
     if(room.players.length>1)notify(room,{type:'notice',message:`Player ${room.players.length} joined the ${room.mode==='queue'?'match':'room'}.`});
     state(room);
@@ -80,9 +83,9 @@ function createServer(options={}) {
     const h=boot();vm.runInContext("SAVE.data={stats:{},coins:0,matches:0,challengesDone:[],records:{},settings:{}};SAVE.save=()=>{}",h.ctx);
     const choices=room.players.map(p=>p.character);
     const list=cast(choices.length,choices).map((c,i)=>({...c,palIdx:room.players[i].palIdx,isCPU:false,team:i,label:'P'+(i+1)}));
-    const m=newMatch(h.ctx,list,room.stage,{rules:{items:'none',hazards:false,stocks:3,mode:'stock'}});m.state='intro';room.match=m;
+    const m=newMatch(h.ctx,list,room.stage,{rules:{items:'none',hazards:room.hazards,stocks:3,mode:'stock'}});m.state='intro';room.match=m;
     m.readPlayerInput=f=>{const p=room.players[f.id];if(!p)return {};const bits=p.mask|p.pending;p.pending=0;return Object.fromEntries(KEYS.map((k,i)=>[k,!!(bits&(1<<i))]));};
-    notify(room,{type:'start',stage:room.stage,cast:list,rules:{items:'none',hazards:false,stocks:3,mode:'stock',teams:false,damageRatio:1,time:150}});notify(room,{type:'notice',message:'Round started!'});state(room);
+    notify(room,{type:'start',stage:room.stage,cast:list,rules:{items:'none',hazards:room.hazards,stocks:3,mode:'stock',teams:false,damageRatio:1,time:150}});notify(room,{type:'notice',message:'Round started!'});state(room);
     let count=0;
     room.tick=setInterval(()=>{
       try {
@@ -121,6 +124,7 @@ function createServer(options={}) {
     if(room.mode==='private' && !p.inLobby && room.phase!=='playing')return;
     if(msg.type==='character' && (room.phase==='lobby'||room.phase==='select') && fighters.includes(msg.key)){p.character=msg.key;p.palIdx=0;state(room);return;}
     if(msg.type==='palette' && (room.phase==='lobby'||room.phase==='select') && Number.isInteger(msg.index) && msg.index>=0 && msg.index<registry.g.FIGHTERS[p.character].palettes.length){p.palIdx=msg.index;state(room);return;}
+    if(msg.type==='hazards' && room.mode==='private' && room.phase==='lobby' && room.host===p && typeof msg.enabled==='boolean'){room.hazards=msg.enabled;state(room);return;}
     if(msg.type==='stage' && room.mode==='private' && room.phase==='lobby' && room.host===p && stages.includes(msg.key)){room.stage=msg.key;state(room);return;}
     if(msg.type==='stage_preview' && room.mode==='queue' && room.phase==='voting' && !p.vote && stages.includes(msg.key)){p.stageChoice=msg.key;state(room);return;}
     if(msg.type==='vote' && room.mode==='queue' && room.phase==='voting' && room.players.length===2 && stages.includes(msg.key)){
