@@ -259,3 +259,25 @@ and ledge poses are generated adaptations; the action sheet does not contain a
 complete set of normal attacks or a hanging pose, so some actions reuse related
 poses and a single anchored ledge pose sways. Effects in the original sheet
 sometimes overlap neighboring poses and have been cropped where necessary.
+
+### Vector
+
+Vector, the Hunter Protocol, is a mid-range cyborg with four specials:
+
+- **G — Hunter Missiles:** launches two independently moving missiles toward
+  opponents in front of him. They have a limited turn rate and expire, so they
+  can be dodged. They respect teams, shields, counters and invulnerability.
+- **Side + G — Overdrive Rush:** back-mounted rockets fire rearward to propel a fast, punishable shoulder charge. The rockets are visual thrust; the charge itself deals damage.
+- **Up + G — Rocket Boost:** fires two shoulder rockets downward to propel Vector upward. Each rocket explodes on contact, damaging nearby opponents; rockets lost offstage expire harmlessly. A fresh jump pressed during the boost is queued until thrust ends, using an available jump.
+- **Down + G — Target Lock:** scans the nearest opponent in front within range.
+  The target is marked for up to four seconds; the next missile volley consumes
+  the mark and tracks that target more sharply.
+- **Final Smash — Redline Barrage:** launches repeated missile pairs in both
+  directions during the Final Smash.
+
+Vector's supplied sheet is in `../assets-src/characters/vector-sheets/`.
+`tools/build_vector.py` (Pillow, NumPy, SciPy) keys and packs a curated set of
+poses into an atlas and portrait. The source has no dedicated idle or ledge
+pose: idle reuses an attack stance and the separately generated hanging pose
+uses a fixed hand anchor. Directional normal attacks use separately authored strike poses, while the
+missiles are independent simulated projectiles rather than baked sheet effects.

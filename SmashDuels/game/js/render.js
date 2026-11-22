@@ -17,7 +17,7 @@ const Sprites = (() => {
     { hue: 220, alpha: 0.10, light: -0.26 }, // shadow / dark
   ];
   // drawn height per fighter, in world px (the atlas is scaled to match)
-  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126, tide: 108 };
+  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126, tide: 108, vector: 112 };
 
   /* ============================================================
      ANIMATION
@@ -757,10 +757,10 @@ const Sprites = (() => {
       if (cfg) { name = cfg.anim; spec = cfg; }
     }
     if (f.state === 'taunt') { name = 'taunt' + (1 + ((f.tauntIdx | 0) % 3)); spec = STATE_ANIM.taunt; }
-    // Tide's two dash poses are a special lunge, not steps in her running
+    // Tide and Vector use special lunge poses, not steps in their running
     // cycle. Use the continuous stride instead, including just after a turn.
-    if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide') { name = 'dash'; spec = STATE_ANIM.dash; }
-    if (f.key === 'tide' && f.state === 'turn' && at.anims.turn) { name = 'turn'; spec = STATE_ANIM.turn; }
+    if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide' && f.key !== 'vector') { name = 'dash'; spec = STATE_ANIM.dash; }
+    if ((f.key === 'tide' || f.key === 'vector') && f.state === 'turn' && at.anims.turn) { name = 'turn'; spec = STATE_ANIM.turn; }
     if (f.state === 'roll') {
       // roll backwards when rolling against your facing, forwards otherwise
       const back = (f.rollDir || 0) !== 0 && (f.rollDir || 0) !== f.facing;
@@ -1432,6 +1432,30 @@ const Sprites = (() => {
     ctx.restore();
   }
 
+  // The launch flash is anchored to the rear shoulder, not the feet.
+  function drawVectorRocket(ctx, f) {
+    const dt=f.actionT-f.action.startup;
+    if (dt < 0 || dt >= 20) return;
+    const scale=f.scale || 1, pulse=1+0.18*Math.sin(dt*.8);
+    ctx.save(); ctx.translate(f.x-f.facing*26*scale, f.y-82*scale);
+    ctx.scale(scale*pulse,scale*pulse);ctx.globalAlpha=.85;
+    ctx.fillStyle='#ff7a20';ctx.beginPath();ctx.moveTo(-9,0);ctx.quadraticCurveTo(-12,17,0,34);ctx.quadraticCurveTo(12,17,9,0);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#fff2aa';ctx.beginPath();ctx.moveTo(-4,0);ctx.quadraticCurveTo(-5,10,0,20);ctx.quadraticCurveTo(5,10,4,0);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+
+  // Flames from the back thrusters bridge the launches and underline forward motion.
+  function drawVectorRush(ctx, f) {
+    const a=f.action, dt=f.actionT-a.startup;
+    if (dt < 0 || dt >= a.active) return;
+    const s=f.scale || 1, length=(38+8*Math.sin(dt*.9))*s;
+    ctx.save();ctx.translate(f.x-f.facing*28*s,f.y-80*s);ctx.scale(-f.facing,1);
+    ctx.globalAlpha=.9;ctx.fillStyle='#ff8025';ctx.beginPath();ctx.moveTo(0,-10*s);
+    ctx.quadraticCurveTo(length*.55,-12*s,length,0);ctx.quadraticCurveTo(length*.55,12*s,0,10*s);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#fff1ad';ctx.beginPath();ctx.moveTo(0,-4*s);ctx.quadraticCurveTo(length*.4,-5*s,length*.7,0);
+    ctx.quadraticCurveTo(length*.4,5*s,0,4*s);ctx.closePath();ctx.fill();ctx.restore();
+  }
+
   /* ---- draw a fighter from the roster atlas ----
    *
    * One transform for the whole frame: translate to the fighter's feet, mirror
@@ -1518,13 +1542,15 @@ const Sprites = (() => {
 
     const vi = (f.palIdx || 0) % VARIANTS.length;
     const src = vi === 0 ? at.img : tinted(at, vi);
-    // Marrow and Tide reuse forward-facing sweep art for back air; mirror it
+    // Marrow, Tide and Vector reuse forward-facing sweep art for back air; mirror it
     // so the live strike reads on the same side as the hitbox.
-    const backAir = (f.key === 'marrow' || f.key === 'tide') && f.state === 'attack' && f.action && f.action.key === 'bair';
+    const backAir = (f.key === 'marrow' || f.key === 'tide' || f.key === 'vector') && f.state === 'attack' && f.action && f.action.key === 'bair';
     const dir = f.facing * (def.artFacing === undefined ? 1 : def.artFacing) * (backAir ? -1 : 1);
 
     const tideRise = f.key === 'tide' && f.state === 'special' && f.action && f.action.specialKey === 'u';
     if (tideRise) drawTideRecoveryWater(ctx, f, false);
+    if (f.key === 'vector' && f.state === 'special' && f.action && f.action.specialKey === 'u') drawVectorRocket(ctx, f);
+    if (f.key === 'vector' && f.state === 'special' && f.action && f.action.specialKey === 's' && f.action.rocketRush) drawVectorRush(ctx, f);
 
     ctx.save();
     const inv = f.invincT > 0 || f.respawnT > 0 || f.buffs.star > 0 || f.spawnProtect > 0;

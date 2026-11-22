@@ -538,7 +538,9 @@ class Match {
     // hitlag
     const hl = Math.round(clamp(kb * 0.22, 2, 14));
     target.hitlag = hl;
-    if (attacker) attacker.hitlag = Math.round(hl * 0.6);
+    // A detached Rocket Boost missile may land after Vector has caught a
+    // ledge. Its remote explosion must not freeze the owner or eat ledge input.
+    if (attacker && !(o.proj && o.proj.kind === 'boostRocket')) attacker.hitlag = Math.round(hl * 0.6);
 
     // combo counter
     if (attacker && attacker !== target) {
