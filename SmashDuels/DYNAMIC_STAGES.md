@@ -42,7 +42,7 @@ Private online room hosts can toggle hazards on or off; everyone sees the select
 
 The four expanded XL arenas use wider decks and added soft-platform routes; their existing mechanics and hazards remain active under the same rules. Great Cave Offensive and Big Battlefield were already XL. Both selectors provide an info button for every stage, including its hazard-off behavior.
 
-Minecraft World and Great Cave Offensive have visible, permanent center gaps even with hazards off; elevated platforms offer routes across. Fighters, items and relevant projectiles can fall through them, and CPU opponents try to jump across or recover through the opening. Only the two outer stage edges have grabbable ledges; the inner gap edges are not ledges. Brinstar and Wrecking Crew spikes are original additions, visible and damaging only with hazards on.
+Minecraft World and Great Cave Offensive have visible, permanent center gaps even with hazards off; elevated platforms offer routes across. Fighters, items and relevant projectiles can fall through them, and CPU opponents try to jump across or recover through the opening. Both outer edges and the exposed inner gap faces are independently grabbable ledges. Briar’s vine and Nomad’s hook can tether to the gap edges; one-way soft platforms remain pass-through surfaces rather than ledges. Brinstar and Wrecking Crew spikes are original additions, visible and damaging only with hazards on.
 
 ## References
 

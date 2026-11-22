@@ -1565,7 +1565,11 @@ const Sprites = (() => {
   function drawSpriteFighter(ctx, f, time) {
     const hang = LEDGE_ART[f.key];
     if (f.state === 'ledge' && f.ledge && hang) {
-      const scale = (TARGET_H[f.key] || 108) * 1.15 * (f.scale || 1) / hang.img.height;
+      // Nomad's hanging artwork includes a long raised arm and a narrower
+      // body; its anatomy needs a larger art scale than the other hang poses.
+      // The hand anchor below remains fixed even when power-ups change size.
+      const hangHeight = f.key === 'nomad' ? 1.4 : 1.15;
+      const scale = (TARGET_H[f.key] || 108) * hangHeight * (f.scale || 1) / hang.img.height;
       const vi = (f.palIdx || 0) % VARIANTS.length;
       const img = vi === 0 ? hang.img : tinted(hang, vi);
       ctx.save();
@@ -1591,8 +1595,17 @@ const Sprites = (() => {
     const ent = spinning && at.meta.spinBody ? at.meta.spinBody : sel.frames[sel.i];
     if (!ent) return false;
     const def = f.def;
-    const s = at.scale * (f.scale || 1);
     const body = at.tiles[ent[0]];
+    // Nomad's supplied jump frames have inconsistent crop heights. Keep his
+    // airborne silhouette close to his idle size without flattening the
+    // intentional crouch or modifying shared attack frames and hitboxes.
+    let poseScale = 1;
+    if (f.key === 'nomad' && (sel.name === 'jump' || sel.name === 'fall')) {
+      const idle = at.anims.idle && at.anims.idle[0];
+      const idleTile = idle && at.tiles[idle[0]];
+      if (idleTile && body.h) poseScale = clamp(idleTile.h / body.h, .97, 1.12);
+    }
+    const s = at.scale * (f.scale || 1) * poseScale;
     const w = body.w * s, h = body.h * s;
 
     /* The body drops at footfall (an integer tile) and rises mid-step, driven by
@@ -2124,6 +2137,8 @@ const Backdrop = (() => {
       for (const gap of stage.groundGaps) {
         for (const x of [gap.x,gap.x+gap.w]) {
           ctx.beginPath();ctx.moveTo(x,stage.ground.y);ctx.lineTo(x,stage.ground.y+40);ctx.stroke();
+          // Bright lip marks make the two interior grab points readable.
+          ctx.fillStyle='#fff2c5';ctx.fillRect(x-5,stage.ground.y-5,10,5);
         }
       }
       ctx.restore();

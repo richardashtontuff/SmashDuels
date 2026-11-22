@@ -1521,17 +1521,25 @@ class Fighter {
     if (this.onGround || this.ledgeCD > 0 || this.input.down || match.stage.ledges === false ||
         this.hasSurfaceBelow(match.stage)) return;
     const gd = match.stage.ground;
-    const edges = [{side:-1, x:gd.x}, {side:1, x:gd.x+gd.w}]
+    // From a gap (or outside the island), only target faces reachable through
+    // the same open air. From below a solid segment we can travel under it.
+    const underDeck = !!deckAt(match.stage,this.x) && this.y > gd.y;
+    if (underDeck && this.y < gd.y+gd.h+14) return;
+    const edges = stageLedges(match.stage)
+      .filter(e => {
+        const hangX=e.x+e.side*30*this.scale;
+        if (deckAt(match.stage,hangX) || ledgeOccupied(match,this,e.side,e.x)) return false;
+        if (underDeck) return true;
+        if (e.side*(this.x-e.x)<0) return false;
+        // Don't pull through another deck segment to reach a different gap.
+        const lo=Math.min(this.x,hangX), hi=Math.max(this.x,hangX);
+        return !deckSegments(match.stage).some(p=>Math.max(lo,p.x)<Math.min(hi,p.x+p.w));
+      })
       .map(e => ({...e, distance:Math.hypot(this.x-e.x,this.y-55*this.scale-gd.y)}))
-      .filter(e => e.distance <= a.tetherRange*this.scale && !match.fighters.some(f =>
-        f !== this && !f.eliminated && f.state === 'ledge' && f.ledge && f.ledge.side === e.side))
+      .filter(e => e.distance <= a.tetherRange*this.scale)
       .sort((a,b) => a.distance-b.distance);
     if (!edges.length) return;
     const {side, x:edgeX} = edges[0];
-    // Below the island, first move around the underside instead of pulling
-    // straight through the solid deck. Above/beside it, a straight pull is safe.
-    const underDeck = this.x > gd.x && this.x < gd.x+gd.w && this.y > gd.y;
-    if (underDeck && this.y < gd.y+gd.h+14) return;
     a.vinePull={side,edgeX,edgeY:gd.y,startX:this.x,startY:this.y,t:0,duration:16,underDeck};
     this.onGround=false;this.onPlatform=null;this.vx=this.vy=0;
     match.fx.ring(edgeX,gd.y,this.pal.accent,24,12);AUDIO.sfx('grab');
@@ -1539,7 +1547,7 @@ class Fighter {
   stepVinePull(match) {
     const a=this.action,p=a && a.vinePull,gd=match.stage.ground;
     if (!p) return;
-    if (match.stage.ledges===false || this.ledgeCD>0 || match.fighters.some(f=>f!==this && !f.eliminated && f.state==='ledge' && f.ledge && f.ledge.side===p.side)) {
+    if (match.stage.ledges===false || this.ledgeCD>0 || ledgeOccupied(match,this,p.side,p.edgeX)) {
       a.vinePull=null;this.stepAction(match);return;
     }
     const u=Math.min(1,++p.t/p.duration), ease=t=>t*t*(3-2*t);
@@ -1752,13 +1760,14 @@ class Fighter {
     if (risingRecovery && this.action.vineTether && (!this.action.vineChecked || this.action.vinePull)) return false;
     if (this.vy < -1 && !risingRecovery) return false;
     const gd = match.stage.ground;
-    for (const e of [{ side: -1, x: gd.x }, { side: 1, x: gd.x + gd.w }]) {
-      // Feet can be a body length below the lip, but never over solid deck.
+    // Check nearest first: a narrow opening has two independent nearby faces.
+    for (const e of stageLedges(match.stage).sort((a,b)=>Math.abs(this.x-a.x)-Math.abs(this.x-b.x))) {
       if (this.y < gd.y - 30 || this.y > gd.y + 90 * this.scale) continue;
-      const beyond = e.side < 0 ? gd.x - this.x : this.x - (gd.x + gd.w);
+      const beyond = e.side * (this.x-e.x);
       if (beyond < LEDGE_OUTSIDE || beyond > 48 * this.scale + LEDGE_OUTSIDE) continue;
-      // One fighter owns each ledge; a second can't stack invisibly on top.
-      if (match.fighters.some(f => f !== this && !f.eliminated && f.state === 'ledge' && f.ledge && f.ledge.side === e.side)) continue;
+      // Never catch a face from inside another piece of the deck.
+      if (deckAt(match.stage,this.x) || deckAt(match.stage,e.x+e.side*30*this.scale)) continue;
+      if (ledgeOccupied(match,this,e.side,e.x)) continue;
       this.snapLedge(match, e.side, e.x);
       return true;
     }
@@ -1808,18 +1817,18 @@ class Fighter {
   ledgeGetup(match, kind) {
     if (!this.ledge) return;
     const gd = match.stage.ground;
-    const side = this.ledge.side;
+    const side = this.ledge.side, edgeX = this.ledge.x;
     this.ledge = null; this.ledgeCD = 24; this.ledgeInvuln = 0;
     this.facing = -side; this.stateT = 0; this.action = null; this.actionT = 0;
     if (kind === 'jump') {
-      this.x = (side < 0 ? gd.x : gd.x + gd.w) + side * 20;
+      this.x = edgeX + side * 20;
       this.y = gd.y - 4; this.onGround = false;
       this.vx = -side * this.def.stats.air * .7;
       this.vy = -this.def.stats.jumpV * this.jumpMul();
       this.jumpHoldT = 8; this.jumpCut = true; this.state = 'jump'; this.animT = 0;
       this.consume('jump'); AUDIO.sfx('jump');
     } else {
-      this.x = side < 0 ? gd.x + 30 : gd.x + gd.w - 30;
+      this.x = edgeX - side * 30;
       this.y = gd.y; this.onGround = true; this.vx = this.vy = 0;
       if (kind === 'attack') {
         this.consume('attack'); this.startAttack('jab', match);
