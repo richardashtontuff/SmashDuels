@@ -16,14 +16,16 @@ SRC = ROOT / 'assets-src/ledge-proposals'
 OUT = ROOT / 'game/assets/ledge'
 # Reference hand coordinates in the original approved images (source pixels).
 HAND = {'valor': (782, 21), 'grim': (1001, 22), 'astra': (877, 82),
-        'vesper': (621, 355), 'rook': (773, 26), 'marrow': (801, 117), 'tide': (787, 28), 'vector': (1000, 45), 'briar': (974, 52)}
+        'vesper': (621, 355), 'rook': (773, 26), 'marrow': (801, 117), 'tide': (787, 28), 'vector': (1000, 45), 'briar': (974, 52), 'nomad': (450, 12)}
 
 def build(key, hand):
     im = Image.open(SRC / (key + '.png')).convert('RGB')
     if key == 'vector': im = im.crop((0, 0, 1040, im.height)) # discard stray line beyond gripping hand
     rgb = np.asarray(im).astype(np.int16)
     r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
-    if key in ('marrow', 'tide', 'vector'):
+    if key == 'nomad':
+        alpha = np.clip((85 - (np.minimum(r,b) - g))/60, 0, 1)
+    elif key in ('marrow', 'tide', 'vector'):
         # Marrow was generated on green, not the other poses' magenta backdrop.
         alpha = np.clip((38 - np.minimum(g - np.maximum(r,b), g - 90))/30, 0, 1)
     else:

@@ -17,7 +17,7 @@ const Sprites = (() => {
     { hue: 220, alpha: 0.10, light: -0.26 }, // shadow / dark
   ];
   // drawn height per fighter, in world px (the atlas is scaled to match)
-  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126, tide: 108, vector: 112, briar: 108 };
+  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126, tide: 108, vector: 112, briar: 108, nomad: 112 };
 
   /* ============================================================
      ANIMATION
@@ -759,8 +759,8 @@ const Sprites = (() => {
     if (f.state === 'taunt') { name = 'taunt' + (1 + ((f.tauntIdx | 0) % 3)); spec = STATE_ANIM.taunt; }
     // Tide and Vector use special lunge poses, not steps in their running
     // cycle. Use the continuous stride instead, including just after a turn.
-    if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide' && f.key !== 'vector' && f.key !== 'briar') { name = 'dash'; spec = STATE_ANIM.dash; }
-    if ((f.key === 'tide' || f.key === 'vector' || f.key === 'briar') && f.state === 'turn' && at.anims.turn) { name = 'turn'; spec = STATE_ANIM.turn; }
+    if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide' && f.key !== 'vector' && f.key !== 'briar' && f.key !== 'nomad') { name = 'dash'; spec = STATE_ANIM.dash; }
+    if ((f.key === 'tide' || f.key === 'vector' || f.key === 'briar' || f.key === 'nomad') && f.state === 'turn' && at.anims.turn) { name = 'turn'; spec = STATE_ANIM.turn; }
     if (f.state === 'roll') {
       // roll backwards when rolling against your facing, forwards otherwise
       const back = (f.rollDir || 0) !== 0 && (f.rollDir || 0) !== f.facing;
@@ -805,8 +805,10 @@ const Sprites = (() => {
         i = t < 3 ? 0 : t < start ? 1 : t < start + 5 ? 2 :
           t < start + 10 ? 3 : t < start + 16 ? 4 : 5;
       }
+      if (f.key === 'nomad' && name === 'uspecial' && act && act.vinePull)
+        i = clamp(Math.floor(act.vinePull.t * n / act.vinePull.duration), 0, n-1);
       if (f.charging) wob = Math.sin((f.chargeT | 0) * 0.42);       // the windup shakes
-      swing = act && (act.spinAxe || (f.key === 'tide' && name === 'uspecial')) ? null : attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
+      swing = act && (act.spinAxe || ((f.key === 'tide' || f.key === 'nomad') && name === 'uspecial')) ? null : attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
     } else {
       i = rowIndex(c, spec, frames, f.actionT | 0, (act && act.dur) || 1);
       if (spec.pulse) wob = Math.sin(c.t * 0.085) * spec.pulse;
@@ -1518,6 +1520,40 @@ const Sprites = (() => {
     ctx.restore();
   }
 
+  // A bright energized cable ends in a clearly readable three-pronged hook.
+  function drawNomadHook(ctx, f) {
+    const a=f.action, p=a && a.vinePull;
+    if (f.state!=='special' || !a || !a.hookTether || !p) return;
+    const s=f.scale||1, x=f.x+f.facing*10*s, y=f.y-70*s;
+    const mx=(x+p.edgeX)/2, my=(y+p.edgeY)/2+12*s;
+    ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+    const cable=()=>{ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(mx,my,p.edgeX,p.edgeY);};
+    ctx.strokeStyle='#063965';ctx.lineWidth=8*s;cable();ctx.stroke();
+    ctx.shadowColor='#00aaff';ctx.shadowBlur=13*s;
+    ctx.strokeStyle='#00baff';ctx.lineWidth=4*s;cable();ctx.stroke();
+    ctx.strokeStyle='#d5faff';ctx.lineWidth=1.5*s;cable();ctx.stroke();
+    // Small animated lightning strokes travel down the cable.
+    for (const q of [.25,.55,.8]) {
+      const u=(q+(f.actionT%12)/40)%1, v=1-u;
+      const px=v*v*x+2*v*u*mx+u*u*p.edgeX, py=v*v*y+2*v*u*my+u*u*p.edgeY;
+      ctx.strokeStyle='#7ae8ff';ctx.lineWidth=2*s;ctx.beginPath();
+      ctx.moveTo(px-5*s,py-6*s);ctx.lineTo(px-1*s,py-1*s);ctx.lineTo(px-4*s,py+1*s);ctx.lineTo(px+3*s,py+7*s);ctx.stroke();
+    }
+    ctx.translate(p.edgeX,p.edgeY);ctx.rotate(Math.atan2(y-p.edgeY,x-p.edgeX));
+    // Three separate curved tines: center, upper and lower, all joined to a
+    // common shank. Their silhouette remains visible on either ledge.
+    const hook=()=>{
+      ctx.beginPath();ctx.moveTo(17*s,0);ctx.lineTo(3*s,0);
+      ctx.moveTo(3*s,0);ctx.lineTo(-13*s,0);ctx.lineTo(-16*s,-3*s);
+      ctx.moveTo(3*s,0);ctx.quadraticCurveTo(-4*s,-3*s,-6*s,-10*s);ctx.lineTo(-14*s,-13*s);
+      ctx.moveTo(3*s,0);ctx.quadraticCurveTo(-4*s,3*s,-6*s,10*s);ctx.lineTo(-14*s,13*s);
+    };
+    ctx.strokeStyle='#07395d';ctx.lineWidth=8*s;hook();ctx.stroke();
+    ctx.strokeStyle='#08c8ff';ctx.lineWidth=4.5*s;hook();ctx.stroke();
+    ctx.strokeStyle='#e4fbff';ctx.lineWidth=1.5*s;hook();ctx.stroke();
+    ctx.fillStyle='#c6f8ff';ctx.beginPath();ctx.arc(3*s,0,3.5*s,0,TAU);ctx.fill();ctx.restore();
+  }
+
   /* ---- draw a fighter from the roster atlas ----
    *
    * One transform for the whole frame: translate to the fighter's feet, mirror
@@ -1606,7 +1642,7 @@ const Sprites = (() => {
     const src = vi === 0 ? at.img : tinted(at, vi);
     // Marrow, Tide and Vector reuse forward-facing sweep art for back air; mirror it
     // so the live strike reads on the same side as the hitbox.
-    const backAir = (f.key === 'marrow' || f.key === 'tide' || f.key === 'vector' || f.key === 'briar') && f.state === 'attack' && f.action && f.action.key === 'bair';
+    const backAir = (f.key === 'marrow' || f.key === 'tide' || f.key === 'vector' || f.key === 'briar' || f.key === 'nomad') && f.state === 'attack' && f.action && f.action.key === 'bair';
     const dir = f.facing * (def.artFacing === undefined ? 1 : def.artFacing) * (backAir ? -1 : 1);
 
     const tideRise = f.key === 'tide' && f.state === 'special' && f.action && f.action.specialKey === 'u';
@@ -1614,6 +1650,7 @@ const Sprites = (() => {
     if (f.key === 'vector' && f.state === 'special' && f.action && f.action.specialKey === 'u') drawVectorRocket(ctx, f);
     if (f.key === 'vector' && f.state === 'special' && f.action && f.action.specialKey === 's' && f.action.rocketRush) drawVectorRush(ctx, f);
     if (f.key === 'briar') drawBriarVines(ctx, f);
+    if (f.key === 'nomad') drawNomadHook(ctx, f);
 
     ctx.save();
     const inv = f.invincT > 0 || f.respawnT > 0 || f.buffs.star > 0 || f.spawnProtect > 0;

@@ -934,7 +934,7 @@ class Fighter {
       const started = this.startSpecial(dir, match);
       // A rejected queued recovery attempt must not silently turn jump+G into
       // a double jump and spend the remaining air jump.
-      if (dir === 'u' && (started || this.key === 'vector' || this.key === 'briar')) this.consume('jump');
+      if (dir === 'u' && (started || this.key === 'vector' || this.key === 'briar' || this.key === 'nomad')) this.consume('jump');
       return;
     }
     // taunt (down while idle on ground and not crouching handled in movement) — tap up on idle = taunt
@@ -1050,6 +1050,8 @@ class Fighter {
     if (a.type === 'special' && a.vineTether && t >= a.startup && !a.vineChecked) {
       a.vineChecked = true; this.tryVineTether(match, a);
     }
+    // Maintain rapid fire while G is held, then leave a short recovery.
+    if (a.specialType === 'rapidfire' && this.input.special) a.dur = Math.max(a.dur, t + 10);
     const dur = a.dur || 30;
     const ended = t >= dur;
     // The tether is a recovery, not a remote attack along its rope.
@@ -1181,6 +1183,16 @@ class Fighter {
     }
     switch (sp.specialKey) {
       case 'n': {
+        if (sp.type === 'rapidfire' && t >= sp.startup &&
+            (s.fired === 0 || this.input.special) && (t-sp.startup) % sp.shotInterval === 0) {
+          s.fired++;
+          // Start inside the barrel so a point-blank opponent cannot be skipped.
+          const x=this.x+this.facing*35*this.scale, y=this.y-62*this.scale;
+          match.spawnProjectile({owner:this,x,y,vx:this.facing*sp.projectileSpeed,vy:0,
+            kind:'rapidBolt',life:sp.projectileLife,size:5*this.scale,damage:sp.damage,bkb:sp.bkb,kbs:sp.kbs,
+            angle:this.facing<0?180-sp.angle:sp.angle,color:this.pal.accent});
+          match.fx.muzzle(this.x+this.facing*70*this.scale,y,this.pal.accent,this.facing);AUDIO.sfx('shoot');
+        }
         if (sp.type === 'huntermissiles' && s.fired < 2 && t >= sp.startup + s.fired * 5) {
           if (s.fired === 0) {
             s.lockTarget = this.vectorLockT > 0 ? this.vectorLockTarget : null;
@@ -1268,6 +1280,10 @@ class Fighter {
           if (this.key === 'astra') match.fx.burst(this.x, this.y - 45, this.pal.accent, 10, 3);
           AUDIO.sfx('dodge');
           match.fx.speedLines(this);
+        }
+        if (sp.gunRush && t>=sp.startup && t<sp.startup+sp.active && (t-sp.startup)%4===0) {
+          match.fx.speedLines(this);
+          if (t===sp.startup) match.fx.arc(this.x+this.facing*40*this.scale,this.y-60*this.scale,-.5*this.facing,this.pal.accent,65*this.scale,10,this.facing);
         }
         // Overdrive's back-mounted rockets fire rearward as the existing dash
         // accelerates. They are thrust visuals; the charge remains the hitbox.

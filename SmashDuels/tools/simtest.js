@@ -2674,5 +2674,97 @@ test('briar: CPU match remains finite with new fighter', () => {
   for(let i=0;i<1200;i++){m.update();for(const f of m.fighters)assert(Number.isFinite(f.x)&&Number.isFinite(f.y),'CPU position');}
 });
 
+/* Nomad: a rapid-fire rifle, rushing gun strike and roll/hook recovery. */
+test('nomad: roster, save migration and classic mode include the gunner', () => {
+  const vm=require('vm'),{ctx,sandbox}=run();
+  sandbox.localStorage.setItem('rift-rumble-save-v1',JSON.stringify({unlocked:['valor'],coins:123,settings:{music:false}}));
+  const save=vm.runInContext('SAVE.load()',ctx);assert(save.unlocked.includes('nomad') && save.coins===123,'save migration');
+  sandbox.Game={startMatch:opts=>sandbox.lastMatch=opts};sandbox.UI={toast:()=>{}};require('./harness').load(ctx,['js/modes.js']);
+  vm.runInContext("Modes.startClassic('nomad',0,5)",ctx);assert(vm.runInContext('Modes.current.stages.slice(0,4)',ctx).every(s=>s.enemy!=='nomad'),'classic self match');
+  for(const mode of ['startTargets','startHomeRun','startMultiMan']) {vm.runInContext(`Modes.${mode}('nomad',0)`,ctx);assert(sandbox.lastMatch.cast[0].key==='nomad',mode);}
+});
+
+test('nomad: held G fires rapid bolts, release stops and tap fires once', () => {
+  for(const side of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['nomad','valor']);b.x=side*500;a.facing=side;
+    let shots=[];const spawn=m.spawnProjectile.bind(m);m.spawnProjectile=o=>{if(o.kind==='rapidBolt')shots.push({t:m.frame,vx:o.vx,angle:o.angle});return spawn(o);};
+    set({special:true});ctl.tick(85);assert(shots.length>=10 && a.state==='special','held G did not sustain fire');
+    assert(shots.every(x=>Math.sign(x.vx)===side && (side===1?x.angle<90:x.angle>90)),'shot direction');
+    assert(b.damage>0,'shots missed opponent');const n=shots.length;set({});ctl.tick(30);assert(shots.length===n && a.state!=='special','fire persisted after release');
+    const tap=itemFixture(['nomad','valor']);tap.b.x=800;let count=0;const sp=tap.m.spawnProjectile.bind(tap.m);tap.m.spawnProjectile=o=>{if(o.kind==='rapidBolt')count++;return sp(o);};
+    tap.set({special:true});tap.ctl.tick(1);tap.set({});tap.ctl.tick(35);assert(count===1,'tap did not fire exactly once');
+  }
+});
+
+test('nomad: rapid shots also hit at point-blank range', () => {
+  for(const side of [-1,1]) {
+    const {a,b,ctl,set}=itemFixture(['nomad','valor']);a.facing=side;b.x=side*50;
+    set({special:true});ctl.tick(1);set({});ctl.tick(20);assert(b.damage>0,'point-blank shot skipped target');
+  }
+});
+
+test('nomad: rapid shots honor shields, teams, invincibility and interruption', () => {
+  for(const mode of ['shield','team','invincible','interrupt']) {
+    const {m,a,b,ctl,set}=itemFixture(['nomad','valor']);b.x=200;
+    if(mode==='team')m.sameTeam=()=>true;if(mode==='invincible')b.invincT=300;
+    let shields=0;const sh=m.shieldHit.bind(m);m.shieldHit=(...args)=>{shields++;return sh(...args)};
+    if(mode==='shield') {const read=m.readPlayerInput;m.readPlayerInput=f=>f===b?{shield:true}:read(f);}
+    let shots=0;const spawn=m.spawnProjectile.bind(m);m.spawnProjectile=o=>{if(o.kind==='rapidBolt')shots++;return spawn(o);};
+    set({special:true});ctl.tick(15);
+    if(mode==='interrupt') {m.hitFighter(null,a,{damage:5,bkb:30,kbs:40,angle:50});const n=shots;ctl.tick(10);assert(shots===n,'kept shooting after hit');}
+    else {ctl.tick(25);if(mode==='shield')assert(shields>0,'shield not used');else assert(b.damage===0,mode+' damaged');}
+  }
+});
+
+test('nomad: side special dashes and strikes once in facing direction', () => {
+  for(const side of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['nomad','valor']);b.x=side*145;
+    let hits=0,angle=0;const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(x===a&&y===b){hits++;angle=o.angle}return hit(x,y,o);};
+    set({[side===1?'right':'left']:true,special:true});ctl.tick(1);set({});ctl.tick(45);
+    assert(side*a.x>15 && hits===1 && b.damage>0,'rush or gun strike failed');
+    assert(side===1?angle<90:angle>90,'wrong knockback direction');
+  }
+});
+
+test('nomad: hook uses Briar ledge rules and restores jump on both sides', () => {
+  for(const side of [-1,1]) for(const y of [-85,125]) {
+    const {ctx}=run(),m=newMatch(ctx,cast(1,['nomad']),'terminal'),f=m.fighters[0],gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w,c=control(m);
+    f.x=edge+side*(y<0?300:150);f.y=gd.y+y;f.vx=f.vy=0;f.onGround=false;f.state='fall';f.facing=-side;
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(4);assert(f.action?.hookTether&&f.action?.vinePull,'hook failed');
+    assert(f.state==='special' && Math.abs(f.x-edge)>30,'hook snapped instantly');c.tick(18);
+    assert(f.state==='ledge' && f.ledge.side===side && !f.usedUpB,'hook did not hang/reset');
+    f.__raw={jump:true};c.tick(1);assert(f.state==='jump','ledge jump failed');
+  }
+});
+
+test('nomad: hook respects ground ray, range, ledge occupancy and one recovery per airtime', () => {
+  for(const mode of ['ground','far','occupied']) {
+    const {ctx}=run(),m=newMatch(ctx,cast(2,['nomad','valor']),'terminal'),[f,b]=m.fighters,gd=m.stage.ground,edge=gd.x+gd.w,c=control(m);
+    b.x=0;b.y=gd.y;b.onGround=true;b.state='idle';b.spawnProtect=b.invincT=0;
+    f.x=mode==='ground'?edge-100:edge+(mode==='far'?500:140);f.y=gd.y+(mode==='ground'?-180:100);f.vx=f.vy=0;f.onGround=false;f.state='fall';
+    if(mode==='occupied')b.snapLedge(m,1,edge);
+    const y=f.y;f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(10);
+    assert(!f.action?.vinePull,mode+' used hook');if(mode==='ground')assert(f.y<y,'normal roll recovery did not rise');
+    assert(f.usedUpB,'recovery not spent');
+  }
+});
+
+test('nomad: interrupted hook and queued ledge jump do not leave a stuck fighter', () => {
+  for(const mode of ['hit','occupied','jump']) {
+    const {ctx}=run(),m=newMatch(ctx,cast(2,['nomad','valor']),'terminal'),[f,b]=m.fighters,gd=m.stage.ground,edge=gd.x+gd.w,c=control(m);
+    b.x=0;b.y=gd.y;b.onGround=true;b.state='idle';b.spawnProtect=b.invincT=0;
+    f.x=edge+150;f.y=gd.y+125;f.vx=f.vy=0;f.onGround=false;f.state='fall';
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(5);assert(f.action?.vinePull,'hook setup');
+    if(mode==='hit') {m.hitFighter(b,f,{damage:6,bkb:22,kbs:45,angle:50});c.tick(1);assert(f.state==='launch'&&!f.action,'hit did not cancel hook');}
+    if(mode==='occupied') {b.snapLedge(m,1,edge);c.tick(1);assert(!f.action?.vinePull && b.state==='ledge','hook stole occupied ledge');}
+    if(mode==='jump') {f.__raw={jump:true};c.tick(1);f.__raw={};c.tick(20);assert(f.state==='jump' && f.vy<0,'buffered hook jump lost');}
+  }
+});
+
+test('nomad: CPU match remains finite', () => {
+  const {ctx}=run(),m=newMatch(ctx,cast(4,['nomad','briar','vector','tide'],{cpu:true}),'foundry',{rules:{items:'none'}});
+  for(let i=0;i<1200;i++){m.update();for(const f of m.fighters)assert(Number.isFinite(f.x)&&Number.isFinite(f.y),'CPU position');}
+});
+
 /* ---------------- entry ---------------- */
 T.run(process.argv[2]).then(fail => process.exit(fail ? 1 : 0));

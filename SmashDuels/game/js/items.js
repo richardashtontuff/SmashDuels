@@ -615,7 +615,7 @@ class Projectile {
       if (f.invincible) continue;
       this.hitIds.add(f.id);
       if (f.shieldHP > 0 && !this.final) { match.shieldHit(this.owner || f, f, this.damage, this.box); }
-      else if (!this.final && (this.kind === 'soulblast' || this.kind === 'hunterMissile') && f.counterActive && this.owner) {
+      else if (!this.final && (this.kind === 'soulblast' || this.kind === 'hunterMissile' || this.kind === 'rapidBolt') && f.counterActive && this.owner) {
         f.counterHit = this.owner; f.counterActive = false;
       } else {
         match.hitFighter(this.owner, f, { damage: this.damage, bkb: this.bkb, kbs: this.kbs, angle: this.angle, proj: this, final: this.final });
@@ -633,7 +633,7 @@ class Projectile {
       if (!this.pull) this.dead = true;
     }
     // Soul Reap's blast can also break target-mode targets and item containers.
-    if (!this.dead && (this.kind === 'soulblast' || this.kind === 'hunterMissile')) {
+    if (!this.dead && (this.kind === 'soulblast' || this.kind === 'hunterMissile' || this.kind === 'rapidBolt')) {
       const touchesTarget = (match.targets || []).some(t => !t.dead && aabb(this.box, {x:t.x-18,y:t.y-18,w:36,h:36}));
       const touchesItem = match.items.some(it => !it.dead && !it.heldBy && aabb(this.box, it.box));
       if (touchesTarget || touchesItem) {
