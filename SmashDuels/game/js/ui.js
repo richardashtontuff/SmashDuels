@@ -221,7 +221,7 @@ const UI = (() => {
   // Backdrops are decorative interpretations, not playable stage names.
   const PROFILE_VIBES = {
     valor: 'RIFT<br>FORGED', grim: 'ANCIENT<br>STONE', astra: 'BORN OF<br>STARLIGHT',
-    vesper: 'AFTER<br>DARK', rook: 'RIFT<br>DOJO', marrow: 'SPECTRAL<br>RUINS', tide: 'OCEAN’S<br>CALL',
+    vesper: 'AFTER<br>DARK', rook: 'RIFT<br>DOJO', marrow: 'SPECTRAL<br>RUINS', tide: 'OCEAN’S<br>CALL', vector: 'HUNTER<br>PROTOCOL',
   };
 
   let lastProfileKey = null;

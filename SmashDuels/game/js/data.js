@@ -327,7 +327,47 @@ FIGHTERS.tide = {
   finalSmash:{name:'OCEAN TEMPEST',type:'spin',duration:150,damage:43},
   grabRange:44,throwDmg:{f:7,b:9,u:7,d:6}
 };
-const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow', 'tide'];
+/* VECTOR — rocket-armed cyborg with a lock-on projectile game. */
+FIGHTERS.vector = {
+  key:'vector', artFacing:1, name:'VECTOR', title:'THE HUNTER PROTOCOL', archetype:'Tech / Zoner',
+  description:'A relentless cybernetic hunter with a burning visor, thrusters, and shoulder-mounted tracking missiles.',
+  color:'#ff963e', theme:'#ff963e', body:{w:48,h:111},
+  stats:{weight:108,walk:2.2,run:6.0,air:4.2,fall:11.5,fastfall:18.5,gravity:.61,jumps:2,jumpV:12.3,djumpV:11.6,airJumps:1,size:1.03,traction:.53,airAccel:.32,dashFrames:10},
+  locomotion:'humanoid', weapon:'fists', weaponLen:0,
+  palettes:[
+    pal('Hunter','#343b48','#111621','#252b36','#4b5461','#ff963e','#151b24'),
+    pal('Ion','#343b48','#111621','#28384f','#697c94','#6cc8ff','#182638'),
+    pal('Toxic','#343b48','#111621','#344132','#798e66','#a9ef57','#202a20'),
+    pal('Overheat','#343b48','#111621','#532d32','#9c5961','#ff5a69','#301a20'),
+    pal('Gold','#343b48','#111621','#51462c','#a3946b','#f7cf69','#2c271c'),
+    pal('Shadow','#343b48','#111621','#171b25','#485169','#b8a9ff','#0e1119')
+  ],
+  moves:{
+    jab:mv({name:'Servo Jab',frames:23,startup:3,active:3,damage:4,bkb:8,kbs:25,angle:35,hitboxes:[hb(13,-64,52,36)]}),
+    ftilt:mv({name:'Plasma Claw',frames:34,startup:7,active:4,damage:9,bkb:19,kbs:51,angle:38,hitboxes:[hb(16,-78,68,53)]}),
+    utilt:mv({name:'Rising Servo',frames:34,startup:6,active:5,damage:8,bkb:18,kbs:52,angle:90,hitboxes:[hb(-24,-119,76,64)]}),
+    dtilt:mv({name:'Low Circuit',frames:30,startup:5,active:4,damage:7,bkb:16,kbs:42,angle:20,hitboxes:[hb(12,-30,64,36)]}),
+    dashattack:mv({name:'Jet Tackle',frames:38,startup:6,active:10,damage:10,bkb:23,kbs:49,angle:48,hitboxes:[hb(2,-78,72,64)]}),
+    fsmash:mv({name:'Reactor Slash',frames:52,startup:13,active:5,damage:17,bkb:30,kbs:88,angle:35,charge:1,hitboxes:[hb(15,-80,78,65)]}),
+    usmash:mv({name:'Skybreaker',frames:49,startup:11,active:5,damage:15,bkb:25,kbs:82,angle:88,charge:1,hitboxes:[hb(-29,-126,84,68)]}),
+    dsmash:mv({name:'Overload Sweep',frames:47,startup:10,active:4,damage:13,bkb:24,kbs:76,angle:22,charge:1,hitboxes:[hb(-62,-31,76,37),hb(14,-31,76,37)]}),
+    nair:mv({name:'Reactor Spin',frames:32,startup:4,active:8,damage:8,bkb:14,kbs:48,angle:45,hitboxes:[hb(-45,-82,94,68)]}),
+    fair:mv({name:'Forward Slash',frames:35,startup:7,active:5,damage:11,bkb:18,kbs:59,angle:40,hitboxes:[hb(13,-87,73,58)]}),
+    bair:mv({name:'Reverse Claw',frames:34,startup:6,active:4,damage:11,bkb:20,kbs:62,angle:148,hitboxes:[hb(-82,-82,70,56)]}),
+    uair:mv({name:'Upward Claw',frames:32,startup:5,active:5,damage:9,bkb:15,kbs:54,angle:88,hitboxes:[hb(-34,-122,76,59)]}),
+    dair:mv({name:'Crash Drive',frames:38,startup:8,active:5,damage:12,bkb:18,kbs:55,angle:268,spike:1,hitboxes:[hb(-25,-18,54,62)]})
+  },
+  specials:{
+    neutral:{name:'HUNTER MISSILES',desc:'Launch two missiles that curve toward nearby opponents',type:'huntermissiles',frames:48,startup:10,active:8,damage:6,bkb:16,kbs:43,angle:45,cooldown:50,missileSpeed:8.5,missileLife:90},
+    side:{name:'OVERDRIVE RUSH',desc:'Back-mounted rockets thrust Vector forward in a shoulder charge',type:'dash',rocketRush:true,frames:46,startup:8,active:13,damage:12,bkb:25,kbs:56,angle:42,rushSpeed:13,dist:160,hitboxes:[hb(2,-78,70,64)]},
+    up:{name:'ROCKET BOOST',desc:'Fire shoulder rockets downward to rise; impacts deal splash damage',type:'recover',frames:46,startup:5,active:16,damage:9,bkb:18,kbs:45,angle:85,rise:10.4,drift:4.3,rocketBoost:true,rocketRadius:70},
+    down:{name:'TARGET LOCK',desc:'Scan a nearby opponent; the next missile volley tracks them more sharply',type:'targetlock',frames:43,startup:12,active:3,cooldown:50,range:550,lockDuration:240}
+  },
+  finalSmash:{name:'REDLINE BARRAGE',type:'barrage',duration:150,damage:48},
+  grabRange:46,throwDmg:{f:8,b:10,u:8,d:7}
+};
+
+const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow', 'tide', 'vector'];
 
 /* ============================================================
    FRAME-DATA TUNING PASS  —  one place, so every fighter moves alike

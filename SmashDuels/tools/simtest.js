@@ -2184,5 +2184,284 @@ test('tide: Geyser Leap, Ocean Guardian, items and CPU', () => {
   for(let i=0;i<1200;i++){m.update();for(const f of m.fighters)assert(Number.isFinite(f.x)&&Number.isFinite(f.y),'CPU position');}
 });
 
+/* Vector: input-level coverage and homing/defense guarantees. */
+test('vector: save migration and all modes include the new fighter', () => {
+  const vm = require('vm'); const {ctx,sandbox} = run();
+  sandbox.localStorage.setItem('rift-rumble-save-v1',JSON.stringify({unlocked:['valor'],coins:123,settings:{music:false}}));
+  const save=vm.runInContext('SAVE.load()',ctx);
+  assert(save.unlocked.includes('vector') && save.coins===123 && !save.settings.music,'save migration');
+  sandbox.Game={startMatch:opts=>{sandbox.lastClassic=opts;}};sandbox.UI={toast:()=>{}};
+  require('./harness').load(ctx,['js/modes.js']);
+  for(const key of ['valor','grim','astra','vesper','rook','marrow','tide','vector']) {
+    vm.runInContext(`Modes.startClassic('${key}',0,5)`,ctx);
+    assert(vm.runInContext('Modes.current.stages.slice(0,4)',ctx).every(s=>s.enemy!==key),key+' fights self');
+  }
+  vm.runInContext("Modes.startClassic('tide',0,5)",ctx);
+  assert(vm.runInContext('Modes.current.stages.some(s=>s.enemy==="vector")',ctx),'Vector absent from classic');
+  for(const mode of ['startTargets','startHomeRun','startMultiMan']) {
+    vm.runInContext(`Modes.${mode}('vector',0)`,ctx);
+    assert(sandbox.lastClassic.cast[0].key==='vector',mode+' does not select Vector');
+  }
+});
+
+test('vector: G launches exactly two heat-seeking missiles in either direction', () => {
+  for(const side of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']);a.facing=side;b.x=side*400;
+    set({special:true});ctl.tick(1);set({});ctl.tick(20);
+    const shots=m.projectiles.filter(p=>p.kind==='hunterMissile');
+    assert(shots.length===2,side+' expected two missiles, got '+shots.length);
+    assert(shots.every(p=>p.owner===a && p.target===b && Math.sign(p.vx)===side),side+' target or launch direction wrong');
+    ctl.tick(70);assert(b.damage>0,side+' missiles failed to hit target');
+  }
+});
+
+test('vector: missiles turn gradually and ignore teammates and respawning fighters', () => {
+  const {ctx}=run(),m=newMatch(ctx,cast(4,['vector','valor','grim','rook']),'terminal',{rules:{items:'none'}});
+  const [a,ally,enemy,respawn]=m.fighters; for(const f of m.fighters){f.spawnProtect=0;f.invincT=0;f.y=0;}
+  a.x=0;ally.x=60;enemy.x=300;enemy.y=-180;respawn.x=90;respawn.state='respawn';
+  m.sameTeam=(x,y)=>x===a&&y===ally;
+  const p=m.spawnProjectile({owner:a,x:0,y:-50,vx:8.5,vy:0,kind:'hunterMissile',speed:8.5,turnRate:.035,life:90,damage:6,size:9});
+  p.update(m);assert(p.target===enemy,'missile chose teammate or respawn');
+  assert(Math.abs(Math.atan2(p.vy,p.vx))<=.0351,'missile snapped to target');
+  assert(!p.dead,'missile hit teammate');
+  enemy.eliminated=true;const vx=p.vx,vy=p.vy;p.update(m);
+  assert(Math.abs(p.vx-vx)<1e-6 && Math.abs(p.vy-vy)<1e-6,'missile steered toward eliminated target');
+});
+
+test('vector: lock scan boosts the next volley and expires', () => {
+  for(const side of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']);a.facing=side;b.x=side*250;
+    set({down:true,special:true});ctl.tick(1);set({});ctl.tick(16);
+    assert(a.vectorLockTarget===b && a.vectorLockT>0,side+' scan did not acquire enemy');
+    ctl.tick(45);set({special:true});ctl.tick(1);set({});ctl.tick(20);
+    const missiles=m.projectiles.filter(p=>p.kind==='hunterMissile');
+    assert(missiles.length===2 && missiles.every(p=>p.boosted && p.turnRate===.075 && p.target===b),'boosted volley missing');
+    assert(!a.vectorLockTarget && !a.vectorLockT,'lock not consumed');
+    a.vectorLockTarget=b;a.vectorLockT=2;ctl.tick(3);assert(!a.vectorLockTarget && !a.vectorLockT,'lock did not expire');
+  }
+});
+
+test('vector: missiles respect shields, counters and targets', () => {
+  for(const mode of ['hit','shield','counter','team','invincible']) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']); b.x=80;
+    if(mode==='team')m.sameTeam=()=>true;
+    if(mode==='invincible')b.invincT=200;
+    const read=m.readPlayerInput;if(mode==='shield')m.readPlayerInput=f=>f===b?{shield:true}:read(f);
+    let hits=0,blocks=0;const hit=m.hitFighter.bind(m),shield=m.shieldHit.bind(m);
+    m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    m.shieldHit=(x,y,...args)=>{if(x===a&&y===b)blocks++;return shield(x,y,...args);};
+    set({special:true});ctl.tick(1);set({});for(let i=0;i<45;i++){if(mode==='counter'&&!b.counterHit)b.counterActive=true;ctl.tick(1);}
+    if(mode==='hit') assert(hits>0 && b.damage>0,'no real hits');
+    else if(mode==='counter') assert(hits<=1,'counter failed to intercept a missile');
+    else assert(hits===0,mode+' took damage through defense');
+    if(mode==='shield')assert(blocks>0,'shield did not block missile');
+    if(mode==='counter')assert(b.counterHit===a,'counter did not intercept');
+  }
+  const {m,a,b}=itemFixture(['vector','valor']);b.x=1000;m.targets=[{x:60,y:-55,dead:false}];
+  const p=m.spawnProjectile({owner:a,x:55,y:-55,vx:1,vy:0,kind:'hunterMissile',speed:1,turnRate:.035,life:30,damage:6,size:9});p.update(m);
+  assert(p.dead,'missile did not hit a target');
+});
+
+test('vector: lock does not mark a teammate or fighter behind, and clears on KO', () => {
+  const {ctx}=run();const m=newMatch(ctx,cast(4,['vector','valor','grim','rook']),'terminal',{rules:{items:'none'}});
+  const [a,ally,back,enemy]=m.fighters;for(const f of m.fighters){f.spawnProtect=0;f.invincT=0;f.y=0;f.onGround=true;}
+  a.x=0;a.facing=1;ally.x=80;back.x=-100;enemy.x=280;m.sameTeam=(x,y)=>x===a&&y===ally;
+  a.startSpecial('d',m);for(let i=0;i<20;i++)a.updateAction(m);
+  assert(a.vectorLockTarget===enemy,'scan did not exclude allies and enemies behind');
+  a.die(m,null);assert(!a.vectorLockT && !a.vectorLockTarget,'KO retained a lock');
+});
+
+test('vector: missiles expire and stop steering when their target respawns', () => {
+  const {m,a,b}=itemFixture(['vector','valor']);b.x=400;
+  const p=m.spawnProjectile({owner:a,x:0,y:-55,vx:8,vy:0,kind:'hunterMissile',speed:8,turnRate:.035,life:5,damage:6,size:9});
+  p.update(m);assert(p.target===b,'no target');b.state='respawn';
+  const vx=p.vx,vy=p.vy;p.update(m);assert(p.vx===vx&&p.vy===vy,'missile steered toward respawning target');
+  for(let i=0;i<8;i++)p.update(m);assert(p.dead,'missile never expires');
+});
+
+test('vector: rush, rocket boost and final barrage function', () => {
+  const x=itemFixture(['vector','valor']);x.b.x=100;x.set({right:true,special:true});x.ctl.tick(1);x.set({});x.ctl.tick(30);assert(x.b.damage>0,'rush failed to hit');
+  const y=itemFixture(['vector','valor']);y.b.x=600;y.a.y=-130;y.a.onGround=false;y.a.state='fall';const start=y.a.y;
+  y.set({up:true,special:true});y.ctl.tick(1);y.set({});y.ctl.tick(25);assert(y.a.usedUpB && y.a.y<start-50,'rocket boost failed');
+  const z=itemFixture(['vector','valor']);z.b.x=450;z.a.startFinalSmash(z.m);z.ctl.tick(31);
+  assert(z.m.projectiles.some(p=>p.kind==='hunterMissile'),'final did not fire barrage');
+  const {ctx}=run();const m=newMatch(ctx,cast(4,['vector','valor','marrow','vector'],{cpu:true}),'foundry',{rules:{items:'none'}});
+  for(let i=0;i<1200;i++){m.update();for(const f of m.fighters)assert(Number.isFinite(f.x)&&Number.isFinite(f.y),'CPU position');}
+});
+
+test('vector: side G fires back-mounted thrust rockets while rushing in either direction', () => {
+  for (const side of [-1,1]) for (const airborne of [false,true]) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']); b.x=-side*180;
+    if(airborne) {a.y-=140;a.onGround=false;a.state='fall';}
+    const shots=[],emit=m.fx.particle.bind(m.fx);
+    m.fx.particle=o=>{if(o.shape==='rushRocket')shots.push({o,x:a.x,y:a.y,t:a.actionT,vx:a.vx});return emit(o);};
+    set({special:true,[side===1?'right':'left']:true});ctl.tick(1);set({});
+    ctl.tick(28);
+    const sp=a.def.specials.side;
+    assert(shots.length===3,'expected three rearward rockets');
+    assert(shots.map(x=>x.t).join(',')===[sp.startup,sp.startup+5,sp.startup+10].join(','),'launches outside thrust window');
+    for(const {o,x,y,vx} of shots) {
+      assert((o.x-x)*side<0 && o.vx*side<0 && o.vy===0,'rocket not moving behind the fighter');
+      assert(y-o.y>=76*a.scale-0.01 && y-o.y<=88*a.scale+0.01,'rocket not fired from back');
+      assert(vx*side>0,'fighter was not propelled forward');
+    }
+    assert(b.damage===0 && m.projectiles.every(p=>p.kind!=='rushRocket'),'visual rockets added unintended hits');
+    ctl.tick(30);assert(!m.fx.parts.some(p=>p.shape==='rushRocket'),'thrust rockets failed to expire');
+  }
+});
+
+test('vector: interrupting side G stops later rocket launches', () => {
+  const {m,a,b,ctl,set}=itemFixture(['vector','valor']);b.x=700;
+  let count=0;const emit=m.fx.particle.bind(m.fx);m.fx.particle=o=>{if(o.shape==='rushRocket')count++;return emit(o);};
+  set({right:true,special:true});ctl.tick(1);set({});ctl.tick(a.def.specials.side.startup+1);
+  assert(count===1,'initial rocket missing');a.action=null;a.state='idle';ctl.tick(30);
+  assert(count===1,'interrupted rush kept launching rockets');
+});
+
+test('vector: up or jump plus G fires two downward shoulder rockets during ascent', () => {
+  for (const side of [-1,1]) for (const input of [{up:true,special:true},{jump:true,special:true}]) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']);a.facing=side;b.x=700;
+    a.y=m.stage.ground.y-300;a.onGround=false;a.state='fall';
+    const launches=[],spawn=m.spawnProjectile.bind(m);
+    m.spawnProjectile=o=>{if(o.kind==='boostRocket')launches.push({o, x:a.x,y:a.y,t:a.actionT});return spawn(o);};
+    set(input);ctl.tick(1);set({});ctl.tick(24);
+    assert(a.usedUpB && launches.length===2, 'boost failed to fire twice');
+    const sp=a.def.specials.up;
+    assert(launches[0].t===sp.startup && launches[1].t===sp.startup+8,'wrong firing timing');
+    for(const {o,x,y} of launches) {
+      assert(o.vx===0 && o.vy>0 && o.x*side<x*side && Math.abs(o.y-(y-82*a.scale))<.01,'rocket not fired downward from rear shoulder');
+    }
+    assert(a.vy<0,'rockets did not propel upward');
+  }
+});
+
+test('vector: a jump pressed during rocket boost is performed after thrust', () => {
+  // Include the early thrust, late thrust, and long recovery that used to
+  // expire the ordinary eight-frame buffer while the button remained held.
+  for(const tick of [2,10,23,27,35]) for(const hold of [false,true]) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']);m.stage.platforms=[];b.x=700;
+    a.y=m.stage.ground.y-350;a.onGround=false;a.state='fall';a.airJumpsLeft=1;
+    let shots=0;const spawn=m.spawnProjectile.bind(m);m.spawnProjectile=o=>{if(o.kind==='boostRocket')shots++;return spawn(o);};
+    set({up:true,special:true});ctl.tick(1);set({});ctl.tick(tick);
+    assert(a.state==='special' && a.actionT===tick,'fixture left boost early');
+    set({jump:true});ctl.tick(1);if(!hold)set({});
+    for(let i=0;i<35 && a.airJumpsLeft===1;i++)ctl.tick(1);
+    assert(a.airJumpsLeft===0 && a.vy<0 && a.state!=='special',`tick ${tick}: jump was lost in boost recovery`);
+    assert(shots===2,'jump cut off a shoulder rocket');
+    assert(a.usedUpB,'jump incorrectly restored the recovery in midair');
+  }
+});
+
+test('vector: retrying an unavailable jump G never silently consumes an air jump', () => {
+  for(const when of ['during','after']) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']);m.stage.platforms=[];b.x=700;
+    a.y=m.stage.ground.y-350;a.onGround=false;a.state='fall';a.airJumpsLeft=1;
+    set({up:true,special:true});ctl.tick(1);set({});ctl.tick(when==='during'?10:48);
+    assert(a.usedUpB && a.airJumpsLeft===1,'fixture did not preserve jump');
+    set({jump:true,special:true});ctl.tick(1);set({});ctl.tick(when==='during'?40:2);
+    assert(a.airJumpsLeft===1,'failed jump+G spent the air jump');
+    set({jump:true});ctl.tick(1);
+    assert(a.airJumpsLeft===0 && a.vy<0,'ordinary air jump unavailable afterward');
+  }
+});
+
+test('vector: queued rocket-boost jump cannot create an extra jump and is canceled on interruption', () => {
+  for(const interrupted of [false,true]) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']);m.stage.platforms=[];b.x=700;
+    a.y=m.stage.ground.y-350;a.onGround=false;a.state='fall';a.airJumpsLeft=interrupted?1:0;
+    set({up:true,special:true});ctl.tick(1);set({});ctl.tick(10);
+    set({jump:true});ctl.tick(1);set({});
+    if(interrupted) {a.action=null;a.state='launch';a.hitstun=8;}
+    ctl.tick(40);
+    assert(a.airJumpsLeft===(interrupted?1:0),interrupted?'interruption fired queued jump':'created an extra air jump');
+  }
+});
+
+test('vector: real up G recovery catches either ledge and can jump and double-jump', () => {
+  for(const side of [-1,1]) for(const combo of [{up:true,special:true},{jump:true,special:true}]) {
+    const {ctx}=run(),m=newMatch(ctx,cast(1,['vector']),'terminal');
+    const f=m.fighters[0],gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w,c=control(m);
+    f.respawnT=0;f.spawnProtect=0;f.x=edge+side*30;f.y=gd.y+110;f.vx=f.vy=0;
+    f.onGround=false;f.state='fall';f.facing=-side;f.__raw=combo;c.tick(1);
+    assert(f.usedUpB && f.action.specialKey==='u','recovery did not start');
+    // A held jump used to start the move must not automatically leave the ledge.
+    for(let i=0;i<20 && f.state!=='ledge';i++) c.tick(1);
+    assert(f.state==='ledge' && !f.usedUpB && f.airJumpsLeft===f.def.stats.airJumps,'recovery did not catch and restore jumps');
+    if(combo.jump) {c.tick(2);assert(f.state==='ledge','held activation jump auto-jumped');}
+    f.__raw={};c.tick(1);f.__raw={jump:true};c.tick(1);
+    assert(f.state==='jump' && f.vy<0 && !f.onGround && f.airJumpsLeft===f.def.stats.airJumps,'ledge jump unavailable');
+    const y=f.y;f.__raw={};c.tick(4);assert(f.y<y,'ledge jump did not rise');
+    f.__raw={jump:true};c.tick(1);assert(f.airJumpsLeft===f.def.stats.airJumps-1 && f.vy<0,'double jump unavailable after ledge jump');
+  }
+});
+
+test('vector: a jump buffered just before a recovery ledge catch is honored', () => {
+  for(const side of [-1,1]) {
+    const {ctx}=run(),m=newMatch(ctx,cast(1,['vector']),'terminal');
+    const f=m.fighters[0],gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w,c=control(m);
+    f.respawnT=0;f.x=edge+side*30;f.y=gd.y+110;f.vx=f.vy=0;f.onGround=false;f.state='fall';f.facing=-side;
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(6);
+    assert(f.state==='special','fixture did not approach ledge during recovery');
+    f.__raw={jump:true};c.tick(1);assert(f.state==='ledge' && f.inputBuffer.jump>0,'catch discarded the fresh jump');
+    f.__raw={};c.tick(1);assert(f.state==='jump' && f.vy<0,'buffered jump did not leave ledge');
+  }
+});
+
+test('vector: remote rocket impact does not freeze ledge owner or eat jump presses', () => {
+  for(const side of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['vector','valor']);const gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w;
+    a.snapLedge(m,side,edge);b.x=edge-side*35;b.y=gd.y;b.invincT=b.spawnProtect=0;
+    const p=m.spawnProjectile({owner:a,x:b.x,y:gd.y-15,vx:0,vy:12,kind:'boostRocket',size:8,life:100,radius:70,damage:9,bkb:18,kbs:45,angle:85,color:'#f80'});
+    p.update(m);assert(b.damage>0 && a.hitlag===0,'remote explosion froze hanging owner');
+    set({jump:true});ctl.tick(1);assert(a.state==='jump'&&a.vy<0,'impact prevented ledge jump');
+    // Other sources of hitlag can still overlap a short press: retain it.
+    a.snapLedge(m,side,edge);a.hitlag=4;set({});ctl.tick(1);set({jump:true});ctl.tick(1);set({});ctl.tick(4);
+    assert(a.state==='jump' && a.vy<0,'ledge jump pressed during hitlag was lost');
+  }
+});
+
+test('vector: boost rocket impact is one splash and respects defenses and teams', () => {
+  for (const mode of ['hit','shield','counter','team','invincible','respawn']) {
+    const {m,a,b}=itemFixture(['vector','valor']);
+    b.x=25; b.y=m.stage.ground.y; a.x=-200;
+    if(mode==='team')m.sameTeam=()=>true;
+    if(mode==='invincible')b.invincT=100;
+    if(mode==='respawn')b.state='respawn';
+    if(mode==='shield')b.shieldHP=50;
+    if(mode==='counter')b.counterActive=true;
+    let hits=0,blocks=0;
+    const hit=m.hitFighter.bind(m),shield=m.shieldHit.bind(m);
+    m.hitFighter=(x,y,o)=>{if(y===b)hits++;return hit(x,y,o);};
+    m.shieldHit=(x,y,...args)=>{if(y===b)blocks++;return shield(x,y,...args);};
+    const p=m.spawnProjectile({owner:a,x:0,y:m.stage.ground.y-15,vx:0,vy:12,kind:'boostRocket',size:8,life:100,radius:70,damage:9,bkb:18,kbs:45,angle:85,color:'#f80'});
+    p.update(m);p.update(m);
+    assert(p.dead,'rocket missed stage');
+    assert(hits===(mode==='hit'?1:0),mode+' splash hit count '+hits);
+    if(mode==='shield')assert(blocks===1,'shield did not block splash');
+    if(mode==='counter')assert(b.counterHit===a,'counter did not intercept splash');
+  }
+});
+
+test('vector: direct rocket contact splashes several foes without a separate direct hit', () => {
+  const {ctx}=run();const m=newMatch(ctx,cast(3,['vector','valor','grim']),'terminal',{rules:{items:'none'}});
+  const [a,b,c]=m.fighters; a.x=-200;b.x=0;c.x=45;
+  for (const f of m.fighters) {f.y=-100;f.state='fall';f.invincT=f.spawnProtect=0;}
+  const count=new Map(),hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{count.set(y,(count.get(y)||0)+1);return hit(x,y,o);};
+  const p=m.spawnProjectile({owner:a,x:0,y:b.y-65,vx:0,vy:12,kind:'boostRocket',size:8,life:30,radius:70,damage:9,bkb:18,kbs:45,angle:85,color:'#f80'});
+  p.update(m);assert(p.dead && count.get(b)===1 && count.get(c)===1,'direct contact did not produce a single multi-target splash');
+});
+
+test('vector: rockets hit platforms and targets, but expire harmlessly offstage', () => {
+  const {m,a,b}=itemFixture(['vector','valor']);b.x=1000;
+  const y=m.stage.ground.y; m.stage.platforms=[{x:-100,y:y-100,w:200}];
+  let explosions=0, items=0;
+  m.fx.explode=()=>explosions++;m.itemsHitByAttack=()=>items++;
+  const shot=(o)=>m.spawnProjectile(Object.assign({owner:a,x:0,y:y-115,vx:0,vy:12,kind:'boostRocket',size:8,life:100,radius:70,damage:9,color:'#f80'},o));
+  let p=shot();p.update(m);assert(p.dead && p.y===y-100 && explosions===1 && items===1,'platform impact failed');
+  m.targets=[{x:0,y:y-250,dead:false}];p=shot({y:y-270});p.update(m);assert(p.dead&&explosions===2&&items===2,'target impact failed');
+  m.targets=[];p=shot({x:m.blast.right+250,life:1});p.update(m);assert(p.dead&&explosions===2,'offstage rocket exploded');
+  p=shot({y:y-400,life:0});p.update(m);assert(p.dead&&explosions===2,'expired rocket exploded');
+});
+
 /* ---------------- entry ---------------- */
 T.run(process.argv[2]).then(fail => process.exit(fail ? 1 : 0));

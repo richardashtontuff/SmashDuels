@@ -182,6 +182,21 @@ class FXSystem {
           ctx.rotate(a); ctx.fillRect(-p.size * 2.2, -p.size * 0.4, p.size * 4.4, p.size * 0.8);
           ctx.restore(); break;
         }
+        case 'rushRocket': {
+          // Cosmetic backfire rocket, pointing opposite the rush with an
+          // exhaust trail facing back toward the fighter. It has no hitbox.
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(p.vy, p.vx));
+          const s=p.size;
+          ctx.globalCompositeOperation='source-over';
+          ctx.fillStyle='#ff8226'; ctx.beginPath(); ctx.moveTo(-s*.65,-s*.35);
+          ctx.lineTo(-s*(2.5+(p.t%3)*.2),0);ctx.lineTo(-s*.65,s*.35);ctx.closePath();ctx.fill();
+          ctx.fillStyle='#fff2a8';ctx.beginPath();ctx.moveTo(-s*.6,-s*.18);ctx.lineTo(-s*1.55,0);ctx.lineTo(-s*.6,s*.18);ctx.closePath();ctx.fill();
+          ctx.fillStyle='#344052';ctx.strokeStyle='#bfced9';ctx.lineWidth=1.4;
+          ctx.beginPath();ctx.moveTo(-s*.8,-s*.48);ctx.lineTo(s*.5,-s*.48);ctx.lineTo(s*1.2,0);
+          ctx.lineTo(s*.5,s*.48);ctx.lineTo(-s*.8,s*.48);ctx.closePath();ctx.fill();ctx.stroke();
+          ctx.fillStyle=p.color;ctx.fillRect(-s*.35,-s*.32,s*.3,s*.64);
+          ctx.restore();break;
+        }
         case 'droplet': {
           ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(p.vy,p.vx)+Math.PI/2);
           ctx.beginPath();ctx.ellipse(0,0,p.size*.6,p.size*1.15,0,0,TAU);ctx.fill();ctx.restore();break;
@@ -534,7 +549,9 @@ class Projectile {
   update(match) {
     this.t++;
     if (this.kind === 'tidewave') { this.updateTideWave(match); return; }
+    if (this.kind === 'boostRocket') { this.updateBoostRocket(match); return; }
     const oldY = this.y;
+    if (this.kind === 'hunterMissile') this.steerHunterMissile(match);
     if (!this.static) { this.x += this.vx; this.y += this.vy; this.vy += this.grav || 0; }
     this.rot += 0.3;
     if ((this.kind === 'bomb' || this.kind === 'thrown' || this.kind === 'fallingStar') && this.vy > 0) {
@@ -575,11 +592,11 @@ class Projectile {
       if (!aabb(this.box, f.hurtbox)) continue;
       if (f.invincible) continue;
       this.hitIds.add(f.id);
-      if (f.shieldHP > 0) { match.shieldHit(this.owner || f, f, this.damage, this.box); }
-      else if (this.kind === 'soulblast' && f.counterActive && this.owner) {
+      if (f.shieldHP > 0 && !this.final) { match.shieldHit(this.owner || f, f, this.damage, this.box); }
+      else if (!this.final && (this.kind === 'soulblast' || this.kind === 'hunterMissile') && f.counterActive && this.owner) {
         f.counterHit = this.owner; f.counterActive = false;
       } else {
-        match.hitFighter(this.owner, f, { damage: this.damage, bkb: this.bkb, kbs: this.kbs, angle: this.angle, proj: this });
+        match.hitFighter(this.owner, f, { damage: this.damage, bkb: this.bkb, kbs: this.kbs, angle: this.angle, proj: this, final: this.final });
         // A blocked, countered, friendly or invincible target never heals the
         // caster. An old projectile must not heal a KO'd/respawning owner.
         if (this.kind === 'soulblast' && this.owner && !this.owner.eliminated &&
@@ -594,7 +611,7 @@ class Projectile {
       if (!this.pull) this.dead = true;
     }
     // Soul Reap's blast can also break target-mode targets and item containers.
-    if (!this.dead && this.kind === 'soulblast') {
+    if (!this.dead && (this.kind === 'soulblast' || this.kind === 'hunterMissile')) {
       const touchesTarget = (match.targets || []).some(t => !t.dead && aabb(this.box, {x:t.x-18,y:t.y-18,w:36,h:36}));
       const touchesItem = match.items.some(it => !it.dead && !it.heldBy && aabb(this.box, it.box));
       if (touchesTarget || touchesItem) {
@@ -611,6 +628,73 @@ class Projectile {
       match.aoeHit(this.owner, this.x, this.y + 50, r, this.damage, this.bkb, this.kbs, this.angle);
       AUDIO.sfx('bomb'); match.cam.shake(7);
     }
+  }
+  updateBoostRocket(match) {
+    if (this.dead) return;
+    const oldY = this.y;
+    this.x += this.vx; this.y += this.vy;
+    let impactY = Infinity;
+    for (const p of [match.stage.ground, ...match.stage.platforms]) {
+      const x = p.cx !== undefined ? p.cx : p.x, y = p.cy !== undefined ? p.cy : p.y;
+      if (this.x >= x && this.x <= x + p.w && oldY + this.size <= y && this.y + this.size >= y)
+        impactY = Math.min(impactY, y);
+    }
+    const enemy = match.fighters.some(f => f !== this.owner && !f.eliminated && !f.invincible &&
+      f.state !== 'respawn' && (!this.owner || !match.sameTeam(this.owner, f)) && aabb(this.box, f.hurtbox));
+    const target = (match.targets || []).some(t => !t.dead && aabb(this.box, {x:t.x-18,y:t.y-18,w:36,h:36}));
+    const item = match.items.some(it => !it.dead && !it.heldBy && aabb(this.box, it.box));
+    if (impactY !== Infinity || enemy || target || item) {
+      if (impactY !== Infinity) this.y = impactY;
+      this.dead = true;
+      const r = this.radius || 70;
+      match.fx.explode(this.x, this.y, r, this.color);
+      // Each rocket produces one splash, including its contact target, not a
+      // direct hit plus splash. Counters and shields apply independently.
+      for (const f of match.fighters) {
+        if (f === this.owner || f.eliminated || f.invincible || f.state === 'respawn' ||
+            (this.owner && match.sameTeam(this.owner, f))) continue;
+        if (Math.hypot(f.x-this.x, f.y-50*f.scale-this.y) >= r+22) continue;
+        if (f.shieldHP > 0) match.shieldHit(this.owner || f, f, this.damage, null);
+        else if (f.counterActive && this.owner) { f.counterHit = this.owner; f.counterActive = false; }
+        else match.hitFighter(this.owner, f, {damage:this.damage,bkb:this.bkb,kbs:this.kbs,angle:this.angle,proj:this});
+      }
+      match.itemsHitByAttack(this.owner, {x:this.x-r,y:this.y-r,w:r*2,h:r*2}, this.damage);
+      AUDIO.sfx('bomb'); match.cam.shake(5);
+      return;
+    }
+    if (this.t % 3 === 0) match.fx.particle({x:this.x,y:this.y,vx:0,vy:-2,life:12,size:3,color:this.color,grav:0,shape:'spark'});
+    // Rockets lost offstage or expired do not explode in empty space.
+    if (this.life-- <= 0 || this.x < match.blast.left-200 || this.x > match.blast.right+200 ||
+        this.y < match.blast.top-100 || this.y > match.blast.bottom+100) this.dead = true;
+  }
+  steerHunterMissile(match) {
+    // Acquire once. A limited turning rate and finite life make dodging possible;
+    // never acquire teammates, the owner, eliminated fighters, or respawning targets.
+    const valid = f => f && f !== this.owner && !f.eliminated && f.state !== 'respawn' &&
+      (!this.owner || !match.sameTeam(this.owner, f));
+    if (!this.acquired) {
+      this.acquired = true;
+      if (!valid(this.target)) {
+        this.target = null;
+        let best = 600;
+        for (const f of match.fighters) {
+          if (!valid(f) || (f.x - this.x) * this.vx < -10) continue;
+          const d = Math.hypot(f.x-this.x, f.y-55*f.scale-this.y);
+          if (d < best) { best = d; this.target = f; }
+        }
+      }
+    }
+    if (valid(this.target)) {
+      const heading = Math.atan2(this.vy, this.vx);
+      const desired = Math.atan2(this.target.y - 55 * this.target.scale - this.y, this.target.x - this.x);
+      const difference = Math.atan2(Math.sin(desired - heading), Math.cos(desired - heading));
+      const angle = heading + clamp(difference, -this.turnRate, this.turnRate);
+      const speed = this.speed || 8.5;
+      this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+      this.angle = this.vx < 0 ? 135 : 45;
+    }
+    if (this.t % 4 === 0) match.fx.particle({x:this.x, y:this.y, vx:-this.vx*.15, vy:-this.vy*.15,
+      life:14, size:3, color:this.color, grav:0, shape:'spark'});
   }
   updateTideWave(match) {
     // `life` is a fixed tick budget, not a hit count: contacts never end the wave.
@@ -657,6 +741,16 @@ class Projectile {
       ctx.scale(this.vx < 0 ? -1 : 1, 1);
       ctx.globalAlpha = clamp((this.life - this.t + 1) / this.fadeFrames, 0, 1);
       drawWaterCrest(ctx, 140, 82, this.t); ctx.restore(); return;
+    }
+    if (this.kind === 'hunterMissile' || this.kind === 'boostRocket') {
+      ctx.rotate(Math.atan2(this.vy, this.vx));
+      const s = this.size;
+      ctx.fillStyle = '#ff8b24'; ctx.beginPath(); ctx.moveTo(-s*.7, -s*.38); ctx.lineTo(-s*2.1-(this.t%3)*2, 0); ctx.lineTo(-s*.7,s*.38); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff1aa'; ctx.beginPath(); ctx.moveTo(-s*.6,-s*.2);ctx.lineTo(-s*1.35,0);ctx.lineTo(-s*.6,s*.2);ctx.closePath();ctx.fill();
+      ctx.fillStyle = '#343f50'; ctx.strokeStyle = '#aab7c6'; ctx.lineWidth = 1.5;
+      ctx.beginPath();ctx.moveTo(-s*.8,-s*.45);ctx.lineTo(s*.55,-s*.45);ctx.lineTo(s*1.1,0);ctx.lineTo(s*.55,s*.45);ctx.lineTo(-s*.8,s*.45);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.fillStyle='#ffab42';ctx.fillRect(-s*.35,-s*.34,s*.3,s*.68);
+      ctx.restore(); return;
     }
     if (this.kind === 'soulblast') {
       // A bright violet comet: its core and trailing energy grow as it charges.

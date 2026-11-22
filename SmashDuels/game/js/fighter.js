@@ -77,6 +77,7 @@ class Fighter {
     this.finalActive = 0; this.finalT = 0;
     this.diX = 0; this.diY = 0;
     this.stunT = 0;
+    this.vectorLockTarget = null; this.vectorLockT = 0;
     this.crouchHeld = false;
     this.inputBuffer = { attack: 0, special: 0, jump: 0, shield: 0, grab: 0 };
     this.dirTapT = { left: 99, right: 99, up: 99, down: 99 };
@@ -208,6 +209,13 @@ class Fighter {
       if (inp[k + 'P']) this.inputBuffer[k] = 8;
       else if (this.inputBuffer[k] > 0) this.inputBuffer[k]--;
     }
+    // Retrying jump+G during Rocket Boost is a recovery input, not a
+    // request to spend an air jump. This also works during hitlag, when the
+    // action itself is not being updated.
+    if (this.state === 'special' && this.action && this.action.rocketBoost &&
+        inp.jump && inp.special && (inp.jumpP || inp.specialP)) {
+      this.consume('jump'); this.action.boostJumpQueued = false;
+    }
     for (const d of ['left', 'right', 'up', 'down']) {
       if (inp[d + 'P']) this.dirTapT[d] = 0; else this.dirTapT[d] = Math.min(99, this.dirTapT[d] + 1);
     }
@@ -233,6 +241,14 @@ class Fighter {
       if (this.buffs[k] === 0 && k === 'star') AUDIO.sfx('beep');
     }
     if (this.cooldowns) for (const k in this.cooldowns) if (this.cooldowns[k] > 0) this.cooldowns[k]--;
+    if (this.vectorLockT > 0) {
+      this.vectorLockT--;
+      const target = this.vectorLockTarget;
+      if (!target || target.eliminated || target.state === 'respawn' || match.sameTeam(this, target)) {
+        this.vectorLockT = 0; this.vectorLockTarget = null;
+      } else if (this.vectorLockT % 30 === 0) match.fx.ring(target.x, target.y - 55 * target.scale, this.pal.accent, 42, 12);
+      if (!this.vectorLockT) this.vectorLockTarget = null;
+    }
     this.shakeX = this.shakeY = 0;
 
     // hitlag freeze
@@ -907,7 +923,10 @@ class Fighter {
       // down takes precedence over jump; horizontal input can still steer up-B.
       if (v < 0) dir = 'u'; else if (v > 0) dir = 'd'; else if (inp.jump) dir = 'u'; else if (h !== 0) dir = 's';
       if (dir === 's' && h) this.facing = h;
-      if (this.startSpecial(dir, match) && dir === 'u') this.consume('jump');
+      const started = this.startSpecial(dir, match);
+      // Vector's rejected recovery attempt must not silently turn jump+G into
+      // a double jump and spend the remaining air jump.
+      if (dir === 'u' && (started || this.key === 'vector')) this.consume('jump');
       return;
     }
     // taunt (down while idle on ground and not crouching handled in movement) — tap up on idle = taunt
@@ -984,6 +1003,21 @@ class Fighter {
     }
     this.actionT++;
     const t = this.actionT;
+
+    // Rocket Boost keeps control locked throughout its 20-tick thrust, but a
+    // fresh jump during that time should not expire unnoticed. Jump on the
+    // first tick after thrust, consuming the usual ground/air jump. The jump
+    // used to activate jump+G was consumed at startup and cannot queue this.
+    if (a.type === 'special' && a.rocketBoost) {
+      if (this.buf('jump') && !this.input.special) {
+        a.boostJumpQueued = true; this.consume('jump');
+      }
+      if (a.boostJumpQueued && t >= a.startup + 20 && (this.onGround || this.airJumpsLeft > 0)) {
+        this.action = null; this.actionT = 0;
+        this.tryJump(match);
+        return true;
+      }
+    }
 
     /* charge smashes */
     if (a.charge && a.type === 'move' && !this.forceRelease) {
@@ -1129,6 +1163,20 @@ class Fighter {
     }
     switch (sp.specialKey) {
       case 'n': {
+        if (sp.type === 'huntermissiles' && s.fired < 2 && t >= sp.startup + s.fired * 5) {
+          if (s.fired === 0) {
+            s.lockTarget = this.vectorLockT > 0 ? this.vectorLockTarget : null;
+            this.vectorLockTarget = null; this.vectorLockT = 0;
+          }
+          const i = s.fired++;
+          const x = this.x + this.facing * 23 * this.scale, y = this.y - (86 - i * 14) * this.scale;
+          match.spawnProjectile({owner:this, x, y, vx:this.facing * sp.missileSpeed, vy:i ? 2 : -2,
+            kind:'hunterMissile', target:s.lockTarget, boosted:!!s.lockTarget,
+            speed:sp.missileSpeed, turnRate:s.lockTarget ? .075 : .035,
+            life:sp.missileLife, damage:sp.damage, bkb:sp.bkb, kbs:sp.kbs,
+            angle:this.facing < 0 ? 180-sp.angle : sp.angle, color:this.pal.accent, size:9});
+          match.fx.muzzle(x, y, this.pal.accent, this.facing); AUDIO.sfx('shoot');
+        }
         if (sp.type === 'tidewave' && t >= sp.startup && !s.projFired) {
           s.projFired = true;
           match.spawnProjectile({ owner:this, x:this.x + this.facing * 55 * this.scale, y:this.y,
@@ -1202,6 +1250,17 @@ class Fighter {
           AUDIO.sfx('dodge');
           match.fx.speedLines(this);
         }
+        // Overdrive's back-mounted rockets fire rearward as the existing dash
+        // accelerates. They are thrust visuals; the charge remains the hitbox.
+        if (sp.rocketRush && t >= sp.startup && t < sp.startup + sp.active &&
+            (t - sp.startup) % 5 === 0) {
+          const x = this.x - this.facing * 29 * this.scale;
+          const y = this.y - (76 + ((t - sp.startup) / 5 % 2) * 12) * this.scale;
+          match.fx.particle({x, y, vx:-this.facing * 8, vy:0, life:22, size:8 * this.scale,
+            color:this.pal.accent, grav:0, drag:1, shape:'rushRocket'});
+          match.fx.muzzle(x, y, this.pal.accent, -this.facing);
+          if (t === sp.startup) AUDIO.sfx('shoot');
+        }
         if (sp.type === 'teleport' && t >= sp.startup && !s.tpFired) { s.tpFired = true;
           const px = this.x;
           const nx = clamp(this.x + this.facing * sp.dist, match.blast.left + 40, match.blast.right - 40);
@@ -1233,6 +1292,15 @@ class Fighter {
             this.vy = -sp.rise * (1 - (t - sp.startup) / 26);
             this.vx = lerp(this.vx, this.horiz() * sp.drift + this.facing * sp.drift * 0.4, 0.25);
             this.hitstun = 0;
+            // Two shoulder-mounted rockets fire straight down as the boost starts.
+            if (sp.rocketBoost && (t === sp.startup || t === sp.startup + 8)) {
+              const x = this.x - this.facing * (t === sp.startup ? 22 : 32) * this.scale;
+              const y = this.y - 82 * this.scale;
+              match.spawnProjectile({owner:this,x,y,vx:0,vy:12,kind:'boostRocket',size:8,
+                life:100,radius:sp.rocketRadius,damage:sp.damage,bkb:sp.bkb,kbs:sp.kbs,angle:sp.angle,color:this.pal.accent});
+              match.fx.burst(x,y,this.pal.accent,8,3);
+              AUDIO.sfx('shoot');
+            }
             if (t === sp.startup) {
               if (this.key !== 'tide') match.fx.ring(this.x, this.y - 30, this.pal.accent, this.key === 'grim' ? 75 : 48, 15);
               if (this.key === 'valor' || this.key === 'vesper') match.fx.arc(this.x, this.y - 60, -Math.PI / 2, this.pal.accent, 55, 13, this.facing);
@@ -1240,7 +1308,7 @@ class Fighter {
             }
             if (this.key === 'tide' && (t - sp.startup) % 4 === 0)
               match.fx.waterSplash(this.x, this.y + 4 * this.scale, .55, this.pal.accent);
-            if (this.key !== 'tide' && (t - sp.startup) % 4 === 0) {
+            if (this.key !== 'tide' && !sp.rocketBoost && (t - sp.startup) % 4 === 0) {
               match.fx.particle({ x: this.x + rand(-10, 10), y: this.y - 10, vx: rand(-1, 1), vy: rand(1, 3), life: 15, size: this.key === 'grim' ? 6 : 3, color: this.pal.accent, grav: 0, shape: this.key === 'grim' ? 'shard' : 'spark' });
               // A short energy line reads as Rook's drone assist, not a stage tether.
               if (this.key === 'rook') match.fx.lines.push({ x1: this.x, y1: this.y - 55, x2: this.x + this.facing * 18, y2: this.y - 135, color: this.pal.accent, w: 3, life: 5, t: 0 });
@@ -1257,7 +1325,7 @@ class Fighter {
             }
           } else if (sp.ascentCombo) {
             this.updateAscentCombo(match, sp, t, s);
-          } else if (!sp.hitboxes && t >= sp.startup + 2 && !s.riseHit) { s.riseHit = true;
+          } else if (!sp.rocketBoost && !sp.hitboxes && t >= sp.startup + 2 && !s.riseHit) { s.riseHit = true;
             match.aoeHit(this, this.x, this.y - 70, 62, sp.damage, sp.bkb, sp.kbs, sp.angle);
             AUDIO.sfx('swing');
             match.fx.burst(this.x, this.y - 40, this.pal.accent, 14);
@@ -1279,6 +1347,19 @@ class Fighter {
         break;
       }
       case 'd': {
+        if (sp.type === 'targetlock' && t >= sp.startup && !s.lockFired) {
+          s.lockFired = true;
+          let best = null, distance = sp.range;
+          for (const other of match.fighters) {
+            if (other === this || other.eliminated || other.state === 'respawn' || match.sameTeam(this, other)) continue;
+            const dx = other.x - this.x, dy = other.y - this.y;
+            const d = Math.hypot(dx, dy);
+            if (dx * this.facing >= 0 && d < distance) { best = other; distance = d; }
+          }
+          this.vectorLockTarget = best; this.vectorLockT = best ? sp.lockDuration : 0;
+          if (best) { match.fx.ring(best.x, best.y - 55 * best.scale, this.pal.accent, 65, 22); AUDIO.sfx('beep'); }
+          else match.fx.ring(this.x + this.facing * 50, this.y - 55, this.pal.accent, 32, 12);
+        }
         if (sp.type === 'orb' && t >= sp.startup && !s.orbFired) {
           s.orbFired = true;
           match.spawnProjectile({ owner: this, x: this.x + this.facing * 50, y: this.y - 60,
@@ -1513,6 +1594,10 @@ class Fighter {
     return false;
   }
   snapLedge(match, side, edgeX) {
+    // Preserve a fresh jump pressed during an up-special just before catching
+    // the ledge. The jump used to activate jump+G was already consumed.
+    const recoveryJump = this.state === 'special' && this.action && this.action.specialKey === 'u'
+      ? (this.action.boostJumpQueued ? 8 : this.inputBuffer.jump) : 0;
     this.state = 'ledge'; this.stateT = 0; this.animT = 0; this.ledge = { side, x: edgeX };
     this.x = edgeX + side * 30 * this.scale; this.y = match.stage.ground.y - 8;
     this.vx = this.vy = 0; this.facing = -side; this.onGround = false; this.onPlatform = null;
@@ -1522,13 +1607,15 @@ class Fighter {
     this.fastfalled = false; this.usedUpB = false; this.usedAirDodge = false;
     // Don't fire a previously buffered action the moment the hang ends.
     for (const key of Object.keys(this.inputBuffer)) this.inputBuffer[key] = 0;
+    this.inputBuffer.jump = recoveryJump || 0;
     match.fx.ring(edgeX, match.stage.ground.y, this.pal.accent, 24, 10);
     AUDIO.sfx('ledge');
   }
   updateLedge(match) {
     const inp = this.input;
     if (!this.ledge) { this.state = 'fall'; return; }
-    if (inp.jumpP) { this.ledgeGetup(match, 'jump'); return; }
+    // A press during hitlag or just before the catch must not be lost.
+    if (inp.jumpP || this.buf('jump')) { this.ledgeGetup(match, 'jump'); return; }
     if (inp.attackP) { this.ledgeGetup(match, 'attack'); return; }
     if (inp.shieldP) { this.ledgeGetup(match, 'roll'); return; }
     if (inp.downP) {
@@ -1610,7 +1697,15 @@ class Fighter {
     }
     // damage pulses
     const pulseRate = 10;
-    if (t % pulseRate === 0 && t < fs.duration - 30) {
+    if (fs.type === 'barrage') {
+      if (t % 15 === 0 && t <= fs.duration - 30) {
+        for (const side of [-1, 1]) match.spawnProjectile({owner:this,
+          x:this.x + side*20*this.scale, y:this.y - 85*this.scale,
+          vx:side*9, vy:-1, kind:'hunterMissile', speed:9, turnRate:.055, life:80,
+          damage:fs.damage/16, bkb:12, kbs:30, angle:side<0?135:45, color:this.pal.accent, size:9, final:1});
+        match.fx.finalPulse(this, t); AUDIO.sfx('shoot');
+      }
+    } else if (t % pulseRate === 0 && t < fs.duration - 30) {
       match.aoeHit(this, this.x, this.y - 60, 240, fs.damage / (fs.duration / pulseRate - 3), 12, 30, 45, { final: 1 });
       match.fx.finalPulse(this, t);
       if (t % (pulseRate * 3) === 0) AUDIO.sfx('hit', { power: 0.5 });
@@ -1662,6 +1757,7 @@ class Fighter {
     this.buffs = { star: 0, mushroom: 0, poison: 0, metal: 0, bunny: 0, flower: 0 };
     this.grabbedBy = null; this.grabbing = null;
     this.ledge = null; this.finalActive = 0; this.hazardCD = 0; this.itemCd = 0;
+    this.vectorLockTarget = null; this.vectorLockT = 0;
     this.action = null;
     this.respawnPlatformT = 70;
   }
