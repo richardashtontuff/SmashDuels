@@ -132,7 +132,7 @@ const UI = (() => {
     classic: { index: '02 / CLASSIC', title: 'CLASSIC', copy: 'TAKE ON A FIVE-STAGE GAUNTLET', front: 'valor', back: 'grim', lead: 'FIVE STAGES.', end: 'ONE CHAMPION.' },
     targets: { index: '03 / TARGETS', title: 'TARGETS', copy: 'BREAK ALL TEN TARGETS AGAINST THE CLOCK', front: 'astra', back: 'vesper', lead: 'TEN TARGETS.', end: 'GO FOR SPEED.' },
     homered: { index: '04 / HOME-RUN', title: 'HOME-RUN', copy: 'POWER UP AND SEND THE BAG FLYING', front: 'rook', back: 'grim', lead: 'WIND IT UP.', end: 'SEND IT FLYING.' },
-    multiman: { index: '05 / MULTI-MAN', title: 'MULTI-MAN', copy: 'TAKE ON A CROWD OF TEN FIGHTERS', front: 'grim', back: 'rook', lead: 'ONE FIGHTER.', end: 'TEN FOES.' },
+    online: { index: '05 / ONLINE', title: 'ONLINE', copy: 'FIND A RIVAL OR PLAY WITH FRIENDS', front: 'nomad', back: 'briar', lead: 'YOUR RIVALS.', end: 'ANYWHERE.' },
   };
   function setupModePreviews() {
     const screen = $('#screen-title');
@@ -430,6 +430,8 @@ const UI = (() => {
 
   /* ---------------- results ---------------- */
   function showResults(match) {
+    $('#btn-results-again').hidden = Online.playing;
+    $('#btn-results-char').hidden = Online.playing;
     const ranks = match.fighters.slice().sort((a, b) => {
       if (a.stocks !== b.stocks) return b.stocks - a.stocks;
       if (a.stats.kos !== b.stats.kos) return b.stats.kos - a.stats.kos;
@@ -557,6 +559,8 @@ const UI = (() => {
   function hideResults() { show('screen-match'); }
 
   function showCustomResults(cfg) {
+    $('#btn-results-again').hidden = false;
+    $('#btn-results-char').hidden = false;
     $('#res-winner').innerHTML = `<div><h2 style="color:${cfg.color}">${cfg.title}</h2><p>${cfg.sub}</p></div>`;
     $('#res-table').innerHTML = `<div class="res-table">${cfg.lines.map(l => `<div class="rt" style="grid-template-columns:1fr"><span>${l}</span></div>`).join('')}</div>`;
     $('#res-challenges').innerHTML = '';
@@ -565,6 +569,7 @@ const UI = (() => {
   }
 
   function openTitle() {
+    Online.leave();
     buildTitle();
     show('screen-title');
     AUDIO.startMusic();
@@ -616,6 +621,7 @@ const UI = (() => {
     $$('#screen-title .modebtn').forEach(b => b.addEventListener('click', () => {
       AUDIO.sfx('confirm');
       modeTarget = b.dataset.mode;
+      if (modeTarget === 'online') { Online.open(); return; }
       show('screen-select'); renderSelect();
     }));
     $('#btn-records').onclick = () => { AUDIO.sfx('menu'); buildRecords(); };
@@ -647,7 +653,8 @@ const UI = (() => {
 
     window.addEventListener('ui-escape', () => {
       navigationTrigger = null;
-      if (current === 'screen-match') { Game.togglePause(); }
+      if (current === 'screen-match') { if (Online.playing) { Online.leave(); Game.quitToMenu(); } else Game.togglePause(); }
+      else if (current === 'screen-online') { Online.leave(); openTitle(); }
       else if (current === 'screen-settings') { closeSettings(); }
       else if (['screen-select', 'screen-rules', 'screen-stage', 'screen-records', 'screen-help'].includes(current)) {
         if (current === 'screen-stage' || current === 'screen-rules') { renderSelect(); show('screen-select'); }
@@ -716,19 +723,21 @@ const Game = (() => {
     raf = requestAnimationFrame(loop);
   }
   function restart() {
+    if (Online.playing) { Online.leave(); quitToMenu(); return; }
     if (!match) return;
     const rules = JSON.parse(JSON.stringify(match.rules));
     const cast = match.fighters.map(f => ({ key: f.key, palIdx: f.palIdx, isCPU: f.isCPU, team: f.team }));
     startMatch({ rules, cast, stageKey: match.stageDef.key });
   }
   function quitToMenu() {
+    Online.leave();
     if (raf) cancelAnimationFrame(raf); raf = null;
     match = null;
     $('#hud').style.display = 'none';
     UI.openTitle();
   }
   function togglePause(force) {
-    if (!match) return;
+    if (!match || Online.playing) return;
     match.paused = force === undefined ? !match.paused : force;
     UI.showPause(match.paused);
     if (match.paused) { AUDIO.stopMusic(); } else if (SAVE.data.settings.music) AUDIO.startMusic();
@@ -823,7 +832,8 @@ const Game = (() => {
     while (acc >= STEP && steps < 4) {
       if (match && !match.paused) {
         GAMEPADS.poll();
-        match.update();
+        if (Online.playing) { Online.tick(match); match.cam.update(match.fighters); }
+        else match.update();
         INPUT.endFrame();
       }
       acc -= STEP; steps++;
@@ -1112,7 +1122,7 @@ const Game = (() => {
     ctx.restore();
   }
 
-  return { init, startMatch, restart, quitToMenu, togglePause };
+  return { init, startMatch, restart, quitToMenu, togglePause, getMatch: () => match };
 })();
 
 /* ============================================================

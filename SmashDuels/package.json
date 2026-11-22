@@ -1,0 +1,17 @@
+{
+  "name": "smash-duels-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rift Rumble static site and authoritative online match server",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "test:online": "node tools/online-test.js",
+    "build": "node -e \"console.log('Game assets are already built; no compilation required.')\""
+  },
+  "dependencies": {
+    "ws": "8.18.3"
+  }
+}
