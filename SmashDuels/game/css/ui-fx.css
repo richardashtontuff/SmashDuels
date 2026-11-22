@@ -106,7 +106,6 @@
 /* Match feedback is contained inside the HUD, and only reflects real state. */
 .hud-slot.damage-hit { animation: hud-impact .25s ease-out; }
 @keyframes hud-impact { 30% { box-shadow: 0 0 0 3px #fff, 4px 4px 0 #0007; } }
-.matchup-panel .damage-fill { transition: width .16s ease-out; }
 .smash-status.ready { text-shadow: 0 0 8px #ffd04f; }
 #btn-pause:hover, #btn-pause:focus-visible { background: #f4c943; color: #101820; }
 

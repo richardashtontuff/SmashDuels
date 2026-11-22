@@ -779,9 +779,6 @@ const Game = (() => {
     const hud = $('#hud-slots');
     hud.innerHTML = '';
     hud.dataset.count = match.fighters.length;
-    const matchup = $('#hud-matchup');
-    matchup.innerHTML = '';
-    matchup.style.display = match.fighters.length === 2 ? 'block' : 'none';
     match.fighters.forEach((f, i) => {
       const color = HUD_PLAYER_COLORS[i % HUD_PLAYER_COLORS.length];
       const player = 'P' + (i + 1);
@@ -789,24 +786,13 @@ const Game = (() => {
       d.className = 'hud-slot';
       d.id = 'hud-' + i;
       d.style.setProperty('--c', color);
-      d.innerHTML = `<div class="hud-portrait-wrap"><img class="hud-portrait" src="assets/portraits/${f.key}_base.png?v=${BUILD}" alt=""><span class="hud-player">${player}</span></div><div class="hud-info">
+      d.innerHTML = `<div class="hud-portrait-wrap"><img class="hud-portrait" src="assets/portraits/${f.key}_base.png?v=${BUILD}" alt=""><span class="hud-player">${player}</span><span class="hud-ready" aria-label="Final Smash ready" title="Final Smash ready" hidden>★</span></div><div class="hud-info">
           <div class="hud-tag">${f.def.name}${f.isCPU ? ' · CPU' : ''}</div>
           <div class="hud-dmg"><span class="pct">0</span><span class="pctsign">%</span></div>
+          <div class="hud-meter" aria-hidden="true"><div class="damage-fill"></div></div>
           <div class="hud-stocks" aria-label="${f.stocks} stocks">${renderStocks(f, color)}</div>
         </div>`;
       hud.appendChild(d);
-      if (match.fighters.length === 2) {
-        const panel = document.createElement('div');
-        panel.className = 'matchup-panel ' + (i ? 'right' : 'left');
-        panel.id = 'matchup-' + i;
-        panel.style.setProperty('--c', color);
-        panel.innerHTML = `<img src="assets/portraits/${f.key}_base.png?v=${BUILD}" alt=""><div class="matchup-info">
-          <div class="matchup-name"><span>${player} · ${f.def.name}</span><span class="matchup-pct">0%</span></div>
-          <div class="damage-track" aria-label="Damage"><div class="damage-fill"></div></div>
-          <div class="matchup-bottom"><span>DAMAGE</span><span class="smash-status"><span class="smash-segments"><i></i><i></i><i></i><i></i></span> SMASH BALL</span></div>
-        </div>`;
-        matchup.appendChild(panel);
-      }
     });
     $('#hud-timer small').textContent = match.rules.mode === 'stock' ? 'MODE' : 'TIME';
     $('#hud-timer span').textContent = match.rules.mode === 'stock' ? 'STOCK' : formatMatchTime(match.matchTime);
@@ -841,13 +827,8 @@ const Game = (() => {
       stocks.setAttribute('aria-label', Math.max(0, f.stocks) + ' stocks');
       el.classList.toggle('out', f.stocks <= 0);
       el.classList.toggle('lead', match.fighters.every(o => o === f || o.stocks < f.stocks));
-      const panel = document.getElementById('matchup-' + i);
-      if (panel) {
-        panel.querySelector('.matchup-pct').textContent = v + '%';
-        panel.querySelector('.damage-fill').style.width = Math.min(100, v / 2) + '%';
-        panel.querySelector('.smash-status').classList.toggle('ready', !!f.hasSmashBall);
-        panel.classList.toggle('out', f.stocks <= 0);
-      }
+      el.querySelector('.damage-fill').style.width = Math.min(100, v / 2) + '%';
+      el.querySelector('.hud-ready').hidden = !f.hasSmashBall;
     });
     if (match.rules.mode !== 'stock') $('#hud-timer span').textContent = formatMatchTime(match.matchTime);
   }
