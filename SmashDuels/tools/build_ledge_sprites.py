@@ -16,7 +16,7 @@ SRC = ROOT / 'assets-src/ledge-proposals'
 OUT = ROOT / 'game/assets/ledge'
 # Reference hand coordinates in the original approved images (source pixels).
 HAND = {'valor': (782, 21), 'grim': (1001, 22), 'astra': (877, 82),
-        'vesper': (621, 355), 'rook': (773, 26), 'marrow': (801, 117), 'tide': (787, 28), 'vector': (1000, 45)}
+        'vesper': (621, 355), 'rook': (773, 26), 'marrow': (801, 117), 'tide': (787, 28), 'vector': (1000, 45), 'briar': (974, 52)}
 
 def build(key, hand):
     im = Image.open(SRC / (key + '.png')).convert('RGB')

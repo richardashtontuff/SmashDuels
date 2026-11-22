@@ -17,7 +17,7 @@ const Sprites = (() => {
     { hue: 220, alpha: 0.10, light: -0.26 }, // shadow / dark
   ];
   // drawn height per fighter, in world px (the atlas is scaled to match)
-  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126, tide: 108, vector: 112 };
+  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126, tide: 108, vector: 112, briar: 108 };
 
   /* ============================================================
      ANIMATION
@@ -759,8 +759,8 @@ const Sprites = (() => {
     if (f.state === 'taunt') { name = 'taunt' + (1 + ((f.tauntIdx | 0) % 3)); spec = STATE_ANIM.taunt; }
     // Tide and Vector use special lunge poses, not steps in their running
     // cycle. Use the continuous stride instead, including just after a turn.
-    if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide' && f.key !== 'vector') { name = 'dash'; spec = STATE_ANIM.dash; }
-    if ((f.key === 'tide' || f.key === 'vector') && f.state === 'turn' && at.anims.turn) { name = 'turn'; spec = STATE_ANIM.turn; }
+    if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide' && f.key !== 'vector' && f.key !== 'briar') { name = 'dash'; spec = STATE_ANIM.dash; }
+    if ((f.key === 'tide' || f.key === 'vector' || f.key === 'briar') && f.state === 'turn' && at.anims.turn) { name = 'turn'; spec = STATE_ANIM.turn; }
     if (f.state === 'roll') {
       // roll backwards when rolling against your facing, forwards otherwise
       const back = (f.rollDir || 0) !== 0 && (f.rollDir || 0) !== f.facing;
@@ -1456,6 +1456,68 @@ const Sprites = (() => {
     ctx.quadraticCurveTo(length*.4,5*s,0,4*s);ctx.closePath();ctx.fill();ctx.restore();
   }
 
+  // Directional vine accents line up with the active F hitboxes and the
+  // rising recovery; they are decorative and never add a second hitbox.
+  function drawBriarVines(ctx, f) {
+    const a=f.action, t=f.actionT;
+    if (!a) return;
+    const scale=f.scale||1;
+    if (f.state==='special' && a.specialType==='vinedash' && t>=a.startup &&
+        (t<a.startup+a.active || (f.grabbing && f.grabbing.vineGrabbed))) {
+      const target=f.grabbing && f.grabbing.vineGrabbed ? f.grabbing : null;
+      const reach=a.vineReach*Math.min(1,(t-a.startup+1)/4)*scale;
+      const x0=f.x+f.facing*18*scale,y0=f.y-60*scale;
+      const x1=target?target.x:f.x+f.facing*reach,y1=target?target.y-48*target.scale:f.y-60*scale;
+      ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+      const vine=()=>{ctx.beginPath();ctx.moveTo(x0,y0);ctx.bezierCurveTo(x0+f.facing*38*scale,y0-22*scale,x1-f.facing*32*scale,y1+20*scale,x1,y1);};
+      ctx.strokeStyle='#284a20';ctx.lineWidth=11*scale;vine();ctx.stroke();ctx.strokeStyle='#9acb54';ctx.lineWidth=4*scale;vine();ctx.stroke();
+      ctx.fillStyle='#c7eb78';for(const q of [.35,.65,.9]){const x=lerp(x0,x1,q),y=lerp(y0,y1,q);ctx.beginPath();ctx.ellipse(x,y-5*scale,9*scale,4*scale,-f.facing*.55,0,TAU);ctx.fill();}
+      ctx.restore();return;
+    }
+    if (f.state==='special' && a.vinePull) {
+      const x0=f.x+f.facing*10*scale,y0=f.y-70*scale,x1=a.vinePull.edgeX,y1=a.vinePull.edgeY;
+      ctx.save();ctx.lineCap='round';
+      const vine=()=>{ctx.beginPath();ctx.moveTo(x0,y0);ctx.quadraticCurveTo((x0+x1)/2,(y0+y1)/2+18*scale,x1,y1);};
+      ctx.strokeStyle='#26441e';ctx.lineWidth=11*scale;vine();ctx.stroke();ctx.strokeStyle='#b3df67';ctx.lineWidth=4*scale;vine();ctx.stroke();
+      ctx.fillStyle='#d6f6a0';ctx.beginPath();ctx.arc(x1,y1,5*scale,0,TAU);ctx.fill();ctx.restore();return;
+    }
+    const rise=f.state==='special' && a.leafRise && t>=a.startup && t<a.startup+20;
+    if (rise) {
+      // Two vines visibly shoot upward as the recovery starts.
+      const grow=Math.min(1,(t-a.startup+1)/5);
+      ctx.save();ctx.translate(f.x,f.y);ctx.scale(f.facing*scale,scale);ctx.lineCap='round';
+      for (const dir of [-1,1]) {
+        const vine=()=>{ctx.beginPath();ctx.moveTo(dir*12,-48);ctx.bezierCurveTo(dir*50,-70,dir*18,-105*grow-48,dir*45,-48-128*grow);};
+        ctx.strokeStyle='#274a20';ctx.lineWidth=9;vine();ctx.stroke();ctx.strokeStyle='#a9db64';ctx.lineWidth=3;vine();ctx.stroke();
+        ctx.fillStyle='#c9ef83';ctx.beginPath();ctx.ellipse(dir*34,-48-95*grow,9,4,dir*.6,0,TAU);ctx.fill();
+      }
+      ctx.restore();return;
+    }
+    const attack=f.state==='attack' && t>=a.startup && t<a.startup+a.active;
+    const key=attack && a.key;
+    if (!rise && !['utilt','usmash','uair','dtilt','dsmash','dair'].includes(key)) return;
+    const down=['dtilt','dsmash','dair'].includes(key), aerialDown=key==='dair';
+    const s=f.scale||1;
+    ctx.save();ctx.translate(f.x,f.y);ctx.scale(f.facing*s,s);
+    ctx.lineCap='round';ctx.lineJoin='round';
+    const path=()=>{
+      ctx.beginPath();ctx.moveTo(-20,-55);
+      if (down) ctx.bezierCurveTo(10,-55,35,-22,aerialDown?2:80,aerialDown?35:-8);
+      else ctx.bezierCurveTo(25,-55,42,-96,10,-135);
+    };
+    ctx.strokeStyle='#2a4d22';ctx.lineWidth=9;path();ctx.stroke();
+    ctx.strokeStyle='#9dd65b';ctx.lineWidth=3;path();ctx.stroke();
+    ctx.fillStyle='#a7dc60';
+    const lx=down?(aerialDown?4:48):20, ly=down?(aerialDown?12:-22):-108;
+    ctx.beginPath();ctx.moveTo(lx,ly);ctx.quadraticCurveTo(lx+16,ly-14,lx+20,ly-4);
+    ctx.quadraticCurveTo(lx+10,ly+4,lx,ly);ctx.fill();
+    if (key==='dsmash') {
+      ctx.strokeStyle='#7db84d';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-12,-42);
+      ctx.quadraticCurveTo(-50,-25,-84,-8);ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   /* ---- draw a fighter from the roster atlas ----
    *
    * One transform for the whole frame: translate to the fighter's feet, mirror
@@ -1544,13 +1606,14 @@ const Sprites = (() => {
     const src = vi === 0 ? at.img : tinted(at, vi);
     // Marrow, Tide and Vector reuse forward-facing sweep art for back air; mirror it
     // so the live strike reads on the same side as the hitbox.
-    const backAir = (f.key === 'marrow' || f.key === 'tide' || f.key === 'vector') && f.state === 'attack' && f.action && f.action.key === 'bair';
+    const backAir = (f.key === 'marrow' || f.key === 'tide' || f.key === 'vector' || f.key === 'briar') && f.state === 'attack' && f.action && f.action.key === 'bair';
     const dir = f.facing * (def.artFacing === undefined ? 1 : def.artFacing) * (backAir ? -1 : 1);
 
     const tideRise = f.key === 'tide' && f.state === 'special' && f.action && f.action.specialKey === 'u';
     if (tideRise) drawTideRecoveryWater(ctx, f, false);
     if (f.key === 'vector' && f.state === 'special' && f.action && f.action.specialKey === 'u') drawVectorRocket(ctx, f);
     if (f.key === 'vector' && f.state === 'special' && f.action && f.action.specialKey === 's' && f.action.rocketRush) drawVectorRush(ctx, f);
+    if (f.key === 'briar') drawBriarVines(ctx, f);
 
     ctx.save();
     const inv = f.invincT > 0 || f.respawnT > 0 || f.buffs.star > 0 || f.spawnProtect > 0;

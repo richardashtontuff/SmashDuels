@@ -281,3 +281,24 @@ poses into an atlas and portrait. The source has no dedicated idle or ledge
 pose: idle reuses an attack stance and the separately generated hanging pose
 uses a fixed hand anchor. Directional normal attacks use separately authored strike poses, while the
 missiles are independent simulated projectiles rather than baked sheet effects.
+
+### Briar
+
+Briar, the Wildwarden, is a nimble forest guardian who controls space with vines
+and earth magic:
+
+- **G — Vine Whip:** lashes a long way straight ahead, hitting once.
+- **Side + G — Bramble Grapple:** dash with a reaching vine that grabs an
+  opponent (including through shield), lifts them, then slams and launches them.
+- **Up + G — Canopy Leap:** shoots vines upward and rises. Offstage near an
+  unoccupied ledge, when no stage surface is below her (even above the island),
+  a vine tethers Briar and pulls her into a ledge hang instead.
+  A fresh jump pressed during ascent queues until the ascent ends if a jump remains.
+- **Down + G — Earth Spike:** erupts spikes around Briar, covering both sides.
+- **Final Smash — Wild Overgrowth:** four pulses of thorny earth across a broad
+  area around her.
+
+The supplied sheet is in `../assets-src/characters/briar-sheets/`.
+`tools/build_briar.py` (Pillow, NumPy, SciPy) keys and packs its curated poses.
+The sheet has no separate idle or ledge pose: the idle uses the first whip
+stance, and the separately generated ledge sprite is anchored by its hand.

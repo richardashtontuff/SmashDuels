@@ -2463,5 +2463,216 @@ test('vector: rockets hit platforms and targets, but expire harmlessly offstage'
   p=shot({y:y-400,life:0});p.update(m);assert(p.dead&&explosions===2,'expired rocket exploded');
 });
 
+/* Briar: playable roster, directional vine and earth specials. */
+test('briar: save migration and modes include the forest fighter', () => {
+  const vm=require('vm'),{ctx,g,sandbox}=run();
+  sandbox.localStorage.setItem('rift-rumble-save-v1',JSON.stringify({unlocked:['valor'],coins:123,settings:{music:false}}));
+  const save=vm.runInContext('SAVE.load()',ctx);assert(save.unlocked.includes('briar') && save.coins===123 && !save.settings.music,'save migration');
+  assert(vm.runInContext("FIGHTER_KEYS.includes('briar') && FIGHTERS.briar.palettes.length === 6",ctx),'roster or palettes missing');
+  sandbox.Game={startMatch:opts=>{sandbox.lastBriarMatch=opts;}};sandbox.UI={toast:()=>{}};
+  require('./harness').load(ctx,['js/modes.js']);
+  vm.runInContext("Modes.startClassic('briar',0,5)",ctx);assert(vm.runInContext('Modes.current.stages.slice(0,4)',ctx).every(s=>s.enemy!=='briar'),'Briar fights herself');
+  for(const mode of ['startTargets','startHomeRun','startMultiMan']) {vm.runInContext(`Modes.${mode}('briar',0)`,ctx);assert(sandbox.lastBriarMatch.cast[0].key==='briar',mode+' missing');}
+  for(const stage of ['skyshrine','terminal']) {
+    const m=newMatch(ctx,cast(2,['briar','valor']),stage);control(m).tick(60);
+    assert(m.fighters.every(f=>Number.isFinite(f.x)&&Number.isFinite(f.y)),'bad fighter state');
+  }
+});
+
+test('briar: vine whip reaches forward in both directions and hits once', () => {
+  for(const side of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['briar','valor']);a.facing=side;b.x=side*245;
+    let hits=0,angle=null;const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(y===b){hits++;angle=o.angle;}return hit(x,y,o);};
+    set({special:true});ctl.tick(1);set({});ctl.tick(35);
+    assert(hits===1 && b.damage>0,`side ${side}: whip hit ${hits} times`);
+    assert(side===1?angle<90:angle>90,'whip launch direction wrong');
+  }
+});
+
+test('briar: vine whip respects defenses, allies and direction', () => {
+  for(const mode of ['shield','counter','team','invincible','behind']) {
+    const {m,a,b,ctl,set}=itemFixture(['briar','valor']);b.x=mode==='behind'?-100:180;
+    if(mode==='team')m.sameTeam=()=>true;if(mode==='invincible')b.invincT=200;
+    const read=m.readPlayerInput;if(mode==='shield')m.readPlayerInput=f=>f===b?{shield:true}:read(f);
+    let hits=0,blocks=0;const hit=m.hitFighter.bind(m),shield=m.shieldHit.bind(m);
+    m.hitFighter=(x,y,o)=>{if(y===b)hits++;return hit(x,y,o);};m.shieldHit=(x,y,...o)=>{if(y===b)blocks++;return shield(x,y,...o);};
+    set({special:true});ctl.tick(1);set({});for(let i=0;i<28;i++){if(mode==='counter'&&!b.counterHit)b.counterActive=true;ctl.tick(1);}
+    assert(hits===0,mode+' bypassed defense');if(mode==='shield')assert(blocks===1,'shield failed');if(mode==='counter')assert(b.counterHit===a,'counter failed');
+  }
+});
+
+test('briar: earth spikes hit both sides once and respect team and shield', () => {
+  for(const mode of ['hit','team','shield']) {
+    const {ctx}=run(),m=newMatch(ctx,cast(3,['briar','valor','grim']),'terminal',{rules:{items:'none'}});
+    const [a,b,c]=m.fighters;for(const f of m.fighters){f.y=m.stage.ground.y;f.vx=f.vy=0;f.onGround=true;f.state='idle';f.spawnProtect=f.invincT=0;}
+    a.x=0;b.x=70;c.x=-70;if(mode==='team')m.sameTeam=(x,y)=>x===a&&y===c;
+    let blocks=0,fullHits=0;const shield=m.shieldHit.bind(m),hit=m.hitFighter.bind(m);
+    m.shieldHit=(x,y,...args)=>{if(y===b)blocks++;return shield(x,y,...args);};m.hitFighter=(x,y,...args)=>{if(y===b)fullHits++;return hit(x,y,...args);};
+    const ctl=control(m);if(mode==='shield')b.__raw={shield:true};a.__raw={down:true,special:true};ctl.tick(1);a.__raw={};ctl.tick(35);
+    assert(mode==='shield'?blocks===1&&fullHits===0:b.damage>0,mode+' front target');
+    assert(mode==='team'?c.damage===0:c.damage>0,mode+' rear target');
+  }
+});
+
+test('briar: side rush hits and recovery rises, preserves and restores jump', () => {
+  for(const side of [-1,1]) {
+    const x=itemFixture(['briar','valor']);x.b.x=side*100;x.set({[side===1?'right':'left']:true,special:true});x.ctl.tick(1);x.set({});x.ctl.tick(30);assert(x.b.damage>0,'rush missed');
+    for(const input of [{up:true,special:true},{jump:true,special:true}]) {
+      const y=itemFixture(['briar','valor']);y.b.x=700;y.m.stage.platforms=[];y.a.y=-300;y.a.onGround=false;y.a.state='fall';const start=y.a.y;
+      y.set(input);y.ctl.tick(1);y.set({});y.ctl.tick(10);assert(y.a.usedUpB && y.a.y<start,'recovery did not rise');
+      y.set({jump:true});y.ctl.tick(1);y.set({});y.ctl.tick(20);
+      assert(y.a.airJumpsLeft===0 && y.a.state!=='special','jump lost during ascent');
+    }
+  }
+});
+
+test('briar: unavailable recovery does not spend a jump or interrupt a held activation', () => {
+  for(const when of ['during','after']) {
+    const {m,a,b,ctl,set}=itemFixture(['briar','valor']);m.stage.platforms=[];b.x=700;
+    a.y=-350;a.vx=a.vy=0;a.onGround=false;a.state='fall';a.airJumpsLeft=1;
+    set({jump:true,special:true});ctl.tick(1);ctl.tick(when==='during'?10:48);
+    assert(a.airJumpsLeft===1 && a.usedUpB,'held activation consumed a jump');
+    set({});ctl.tick(1);set({jump:true,special:true});ctl.tick(1);set({});ctl.tick(when==='during'?40:2);
+    assert(a.airJumpsLeft===1,'rejected recovery consumed the remaining jump');
+    set({jump:true});ctl.tick(1);assert(a.airJumpsLeft===0 && a.vy<0,'air jump unavailable after retry');
+  }
+});
+
+test('briar: recovery ledge catch resets recovery and can jump', () => {
+  for(const side of [-1,1]) {
+    const {ctx}=run(),m=newMatch(ctx,cast(1,['briar']),'terminal'),f=m.fighters[0],gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w,c=control(m);
+    f.respawnT=0;f.x=edge+side*30;f.y=gd.y+110;f.vx=f.vy=0;f.onGround=false;f.state='fall';f.facing=-side;
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};for(let i=0;i<20&&f.state!=='ledge';i++)c.tick(1);
+    assert(f.state==='ledge'&&!f.usedUpB&&f.airJumpsLeft===f.def.stats.airJumps,'no ledge reset');
+    f.__raw={jump:true};c.tick(1);assert(f.state==='jump'&&f.vy<0,'could not jump from ledge');
+  }
+});
+
+test('briar: grapple extends during dash, lifts, slams and launches once in either direction', () => {
+  for (const side of [-1,1]) {
+    const {m,a,b,ctl,set}=itemFixture(['briar','valor']); b.x=side*190;
+    let hits=0; const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    set({[side===1?'right':'left']:true,special:true});ctl.tick(1);set({});
+    for(let i=0;i<22&&!a.grabbing;i++)ctl.tick(1);
+    assert(a.grabbing===b && b.grabbedBy===a && b.state==='grabbed','vine failed to grab');
+    assert(side*a.x>0 && b.damage===0,'dash or early damage wrong');
+    const y=b.y;ctl.tick(10);assert(b.y<y-60 && b.damage===0,'victim not lifted');
+    ctl.tick(10);assert(!a.grabbing && !b.grabbedBy && b.damage>0 && hits===1,'slam failed or repeated');
+    assert(b.state==='launch' && side*b.vx>0 && b.vy<0,'slam lacks launch recoil');
+    ctl.tick(45);assert(hits===1,'grapple hit more than once');
+  }
+});
+
+test('briar: grapple obeys range, facing, team, invincibility and grabs shields', () => {
+  for (const mode of ['far','behind','team','invincible','shield']) {
+    const {m,a,b,ctl,set}=itemFixture(['briar','valor']);b.x=mode==='far'?650:mode==='behind'?-100:160;
+    if(mode==='team')m.sameTeam=()=>true;if(mode==='invincible')b.invincT=200;
+    const read=m.readPlayerInput;if(mode==='shield')m.readPlayerInput=f=>f===b?{shield:true}:read(f);
+    set({right:true,special:true});ctl.tick(1);set({});ctl.tick(55);
+    assert(mode==='shield'?b.damage>0:b.damage===0,mode+' grapple eligibility');
+  }
+});
+
+test('briar: interruption and KO safely release both grapple links', () => {
+  for(const mode of ['attackerHit','victimHit','attackerKO','victimKO']) {
+    const {m,a,b,ctl,set}=itemFixture(['briar','valor']);b.x=140;
+    set({right:true,special:true});ctl.tick(1);set({});for(let i=0;i<20&&!a.grabbing;i++)ctl.tick(1);
+    assert(a.grabbing===b,mode+' setup');
+    if(mode==='attackerHit'||mode==='victimHit')m.hitFighter(null,mode==='attackerHit'?a:b,{damage:4,bkb:20,kbs:40,angle:45});
+    else (mode==='attackerKO'?a:b).die(m,null);
+    ctl.tick(1);assert(!a.grabbing&&!b.grabbedBy&&!b.vineGrabbed,mode+' left dangling grab');
+    if(mode==='victimHit')assert(b.hitstun>0 && b.state==='launch','intervening hit lost launch');
+    if(mode==='attackerHit'||mode==='attackerKO')assert(b.state!=='grabbed','victim stuck');
+  }
+});
+
+test('briar: offstage tether travels visibly to either ledge, then restores recovery', () => {
+  for(const side of [-1,1]) {
+    const {ctx}=run(),m=newMatch(ctx,cast(1,['briar']),'terminal'),f=m.fighters[0],gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w,c=control(m);
+    f.x=edge+side*150;f.y=gd.y+125;f.vx=f.vy=0;f.onGround=false;f.state='fall';f.facing=-side;
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(4);
+    assert(f.action&&f.action.vinePull && f.state==='special','tether failed');
+    const before=Math.abs(f.x-edge);assert(before>30,'snapped instead of pulling');
+    c.tick(7);assert(f.state==='special'&&Math.abs(f.x-edge)<before,'vine did not pull');
+    c.tick(10);assert(f.state==='ledge'&&f.ledge.side===side&&!f.usedUpB,'tether did not hang/reset');
+    f.__raw={jump:true};c.tick(1);assert(f.state==='jump','ledge jump unavailable');
+  }
+});
+
+test('briar: tether cannot steal an occupied ledge or reach too far', () => {
+  for(const mode of ['occupied','far','onstage','disabled']) {
+    const {ctx}=run(),m=newMatch(ctx,cast(2,['briar','valor']),'terminal'),[f,b]=m.fighters,gd=m.stage.ground,c=control(m),edge=gd.x+gd.w;
+    b.spawnProtect=b.invincT=0;b.x=0;b.y=gd.y;b.onGround=true;b.state='idle';
+    f.x=mode==='far'?edge+400:mode==='onstage'?edge-60:edge+120;f.y=gd.y+(mode==='onstage'?-100:100);f.vx=f.vy=0;f.onGround=false;f.state='fall';
+    if(mode==='occupied')b.snapLedge(m,1,edge);if(mode==='disabled')m.stage.ledges=false;
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(6);
+    assert(!f.action?.vinePull,mode+' tether incorrectly activated');
+    if(mode==='occupied')assert(b.state==='ledge','stole ledge');
+  }
+});
+
+test('briar: tether reaches above either side at the increased range', () => {
+  for (const side of [-1,1]) {
+    const {ctx}=run(),m=newMatch(ctx,cast(1,['briar']),'terminal'),f=m.fighters[0],gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w,c=control(m);
+    assert(f.def.specials.up.tetherRange===351,'range is not 35% larger');
+    f.x=edge+side*300;f.y=gd.y-85;f.vx=f.vy=0;f.onGround=false;f.state='fall';
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(4);
+    assert(f.action?.vinePull && f.action.vinePull.side===side,'no above-stage tether beyond old range');
+    assert(f.y<gd.y-30 && f.state==='special','snapped instead of visibly pulling');
+    c.tick(18);assert(f.state==='ledge'&&f.ledge.side===side,'did not reach nearest ledge');
+  }
+});
+
+test('briar: downward surface ray checks deck and moving platforms, and range is bounded', () => {
+  const {ctx}=run(),m=newMatch(ctx,cast(1,['briar']),'terminal'),f=m.fighters[0],gd=m.stage.ground,edge=gd.x+gd.w;
+  const makeAction=()=>({...f.def.specials.up});f.input={};f.onGround=false;f.ledgeCD=0;
+  f.x=edge-20;f.y=gd.y-100;assert(f.hasSurfaceBelow(m.stage),'deck not detected below');let a=makeAction();f.tryVineTether(m,a);assert(!a.vinePull,'tether over ground');
+  f.x=edge+100;f.y=gd.y-120;m.stage.platforms=[{x:-500,y:-500,cx:edge+50,cy:gd.y-40,w:100}];
+  assert(f.hasSurfaceBelow(m.stage),'moving platform not detected at its live position');a=makeAction();f.tryVineTether(m,a);assert(!a.vinePull,'tether over soft platform');
+  m.stage.platforms[0].cy=gd.y-180;assert(!f.hasSurfaceBelow(m.stage),'platform above counted as ground');a=makeAction();f.tryVineTether(m,a);assert(a.vinePull,'surface above should not block');
+  m.stage.platforms=[];f.x=edge+351*f.scale+1;f.y=gd.y+55*f.scale;a=makeAction();f.tryVineTether(m,a);assert(!a.vinePull,'tether exceeded range');
+  f.x=edge+351*f.scale-1;a=makeAction();f.tryVineTether(m,a);assert(a.vinePull,'tether missed inside range');
+});
+
+test('briar: tether from below the island goes around its solid underside', () => {
+  for(const side of [-1,1]) {
+    const {ctx}=run(),m=newMatch(ctx,cast(1,['briar']),'terminal'),f=m.fighters[0],gd=m.stage.ground,edge=side<0?gd.x:gd.x+gd.w,c=control(m);
+    f.x=edge-side*100;f.y=gd.y+150;f.vx=f.vy=0;f.onGround=false;f.state='fall';
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(4);assert(f.action?.vinePull?.underDeck,'under-island tether missing');
+    for(let i=0;i<18 && f.state!=='ledge';i++) {c.tick(1);assert(!(f.x>gd.x&&f.x<gd.x+gd.w&&f.y<gd.y+gd.h+14),'passed through deck');}
+    assert(f.state==='ledge' && f.ledge.side===side,'under-island pull missed nearest ledge');
+  }
+});
+
+test('briar: tether releases if ledge becomes occupied and carries buffered jump to the hang', () => {
+  for(const mode of ['occupied','jump']) {
+    const {ctx}=run(),m=newMatch(ctx,cast(2,['briar','valor']),'terminal'),[f,b]=m.fighters,gd=m.stage.ground,edge=gd.x+gd.w,c=control(m);
+    b.x=0;b.y=gd.y;b.onGround=true;b.state='idle';b.spawnProtect=b.invincT=0;
+    f.x=edge+150;f.y=gd.y+125;f.vx=f.vy=0;f.onGround=false;f.state='fall';
+    f.__raw={up:true,special:true};c.tick(1);f.__raw={};c.tick(5);assert(f.action?.vinePull,'tether setup failed');
+    if(mode==='occupied') {
+      b.snapLedge(m,1,edge);c.tick(1);assert(!f.action?.vinePull && f.state!=='ledge' && b.state==='ledge','occupied ledge stolen');
+    } else {
+      f.__raw={jump:true};c.tick(1);f.__raw={};c.tick(20);
+      assert(f.state==='jump' && f.vy<0 && f.ledgeCD>0,'buffered tether jump lost');
+    }
+  }
+});
+
+test('briar: final grows four thorn fields, hits enemies and leaves allies alone', () => {
+  const {ctx}=run(),m=newMatch(ctx,cast(3,['briar','valor','grim']),'terminal',{rules:{items:'none'}});
+  const [a,b,c]=m.fighters;for(const f of m.fighters){f.y=m.stage.ground.y;f.onGround=true;f.spawnProtect=f.invincT=0;f.state='idle';}
+  a.x=0;b.x=60;c.x=-60;m.sameTeam=(x,y)=>x===a&&y===c;
+  let pulses=0,fields=0;const aoe=m.aoeHit.bind(m),thorn=m.fx.thornField.bind(m.fx);
+  m.aoeHit=(...args)=>{pulses++;return aoe(...args);};m.fx.thornField=(...args)=>{fields++;return thorn(...args);};
+  a.startFinalSmash(m);control(m).tick(155);
+  assert(pulses===4&&fields===4,'missing final pulses');assert(b.damage>0&&c.damage===0,'final ignored teams or failed to hit');assert(!a.finalActive,'final did not finish');
+});
+
+test('briar: CPU match remains finite with new fighter', () => {
+  const {ctx}=run(),m=newMatch(ctx,cast(4,['briar','vector','tide','marrow'],{cpu:true}),'foundry',{rules:{items:'none'}});
+  for(let i=0;i<1200;i++){m.update();for(const f of m.fighters)assert(Number.isFinite(f.x)&&Number.isFinite(f.y),'CPU position');}
+});
+
 /* ---------------- entry ---------------- */
 T.run(process.argv[2]).then(fail => process.exit(fail ? 1 : 0));

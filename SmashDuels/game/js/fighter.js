@@ -69,7 +69,7 @@ class Fighter {
     this.shieldHP = 0; this.shieldStun = 0; this.shieldT = 0;
     this.action = null; this.actionT = 0; this.hitIds = new Map(); this.hitCount = new Map();
     this.ledge = null; this.ledgeCD = 0; this.ledgeInvuln = 0;
-    this.grabbing = null; this.grabbedBy = null; this.grabT = 0;
+    this.grabbing = null; this.grabbedBy = null; this.grabT = 0; this.vineGrabbed = false;
     this.groundDist = 0; this.onGround = false;
     this.comboCount = 0; this.comboTimer = 0;
     this.dropThroughT = 0; this.tauntIdx = 0;
@@ -209,10 +209,10 @@ class Fighter {
       if (inp[k + 'P']) this.inputBuffer[k] = 8;
       else if (this.inputBuffer[k] > 0) this.inputBuffer[k]--;
     }
-    // Retrying jump+G during Rocket Boost is a recovery input, not a
+    // Retrying jump+G during a queued recovery is a recovery input, not a
     // request to spend an air jump. This also works during hitlag, when the
     // action itself is not being updated.
-    if (this.state === 'special' && this.action && this.action.rocketBoost &&
+    if (this.state === 'special' && this.action && (this.action.rocketBoost || this.action.queueRecoveryJump) &&
         inp.jump && inp.special && (inp.jumpP || inp.specialP)) {
       this.consume('jump'); this.action.boostJumpQueued = false;
     }
@@ -232,6 +232,9 @@ class Fighter {
   /* ---------------- main update ---------------- */
   update(match) {
     this.stateT++; this.animT++; this.hitT++;
+    if (this.grabbing && this.grabbing.vineGrabbed &&
+        (this.state !== 'special' || !this.action || this.action.specialType !== 'vinedash'))
+      this.releaseVineGrab();
     if (this.hazardCD > 0) this.hazardCD--;
     if (this.itemCd > 0) this.itemCd--;
     this.comboTimer = Math.max(0, this.comboTimer - 1);
@@ -325,7 +328,8 @@ class Fighter {
     // ---- grabbed by someone
     if (this.grabbedBy) {
       const g = this.grabbedBy;
-      this.x = g.x + g.facing * 30 * g.scale; this.y = g.y - 2;
+      if (this.vineGrabbed && g.action && g.action.specialType === 'vinedash') g.positionVineVictim();
+      else { this.x = g.x + g.facing * 30 * g.scale; this.y = g.y - 2; }
       this.vx = this.vy = 0;
       this.state = 'grabbed';
       this.facing = -g.facing;
@@ -337,7 +341,11 @@ class Fighter {
 
     // ---- action states that lock movement
     if (this.state === 'attack' || this.state === 'special' || this.state === 'grab' || this.state === 'grabbing' || this.state === 'spotdodge' || this.state === 'roll' || this.state === 'airdodge' || this.state === 'land') {
-      if (this.updateAction(match)) { this.stepAction(match); return; }
+      if (this.updateAction(match)) {
+        if (this.state === 'special' && this.action && this.action.vinePull) this.stepVinePull(match);
+        else this.stepAction(match);
+        return;
+      }
     }
 
     // ---- shield
@@ -924,9 +932,9 @@ class Fighter {
       if (v < 0) dir = 'u'; else if (v > 0) dir = 'd'; else if (inp.jump) dir = 'u'; else if (h !== 0) dir = 's';
       if (dir === 's' && h) this.facing = h;
       const started = this.startSpecial(dir, match);
-      // Vector's rejected recovery attempt must not silently turn jump+G into
+      // A rejected queued recovery attempt must not silently turn jump+G into
       // a double jump and spend the remaining air jump.
-      if (dir === 'u' && (started || this.key === 'vector')) this.consume('jump');
+      if (dir === 'u' && (started || this.key === 'vector' || this.key === 'briar')) this.consume('jump');
       return;
     }
     // taunt (down while idle on ground and not crouching handled in movement) — tap up on idle = taunt
@@ -1004,11 +1012,11 @@ class Fighter {
     this.actionT++;
     const t = this.actionT;
 
-    // Rocket Boost keeps control locked throughout its 20-tick thrust, but a
+    // These recoveries lock control throughout their 20-tick ascent, but a
     // fresh jump during that time should not expire unnoticed. Jump on the
-    // first tick after thrust, consuming the usual ground/air jump. The jump
+    // first tick after ascent, consuming the usual ground/air jump. The jump
     // used to activate jump+G was consumed at startup and cannot queue this.
-    if (a.type === 'special' && a.rocketBoost) {
+    if (a.type === 'special' && (a.rocketBoost || a.queueRecoveryJump)) {
       if (this.buf('jump') && !this.input.special) {
         a.boostJumpQueued = true; this.consume('jump');
       }
@@ -1039,10 +1047,13 @@ class Fighter {
       }
     }
 
+    if (a.type === 'special' && a.vineTether && t >= a.startup && !a.vineChecked) {
+      a.vineChecked = true; this.tryVineTether(match, a);
+    }
     const dur = a.dur || 30;
     const ended = t >= dur;
-    // resolve hitboxes
-    if (a.type === 'special' && a.hitboxes) {
+    // The tether is a recovery, not a remote attack along its rope.
+    if (a.type === 'special' && a.hitboxes && !a.vinePull) {
       /* A rush special used to be all theatre: the dash branch of `updateSpecial` grants
          the speed, the travel budget, the invincibility and the speed lines, and the move
          authored `damage/bkb/kbs/angle` that nothing ever read — so running into someone
@@ -1129,6 +1140,7 @@ class Fighter {
     if (a.type === 'landing' && this.horiz() === 0) { this.vx *= 0.96; }
 
     if (ended || (a.cancelable && t > a.cancelable)) {
+      if (this.grabbing && this.grabbing.vineGrabbed) this.releaseVineGrab();
       this.shieldDodging = false;
       if (this.state === 'roll' || this.state === 'spotdodge' || this.state === 'airdodge') this.invincT = Math.min(this.invincT, 2);
       this.action = null; this.actionT = 0; this.charging = false; this.chargeT = 0; this.forceRelease = false;
@@ -1160,6 +1172,12 @@ class Fighter {
         match.cam.shake(5);
       }
       else match.fx.arc(this.x + this.facing * 25, this.y - 55, -0.6 * this.facing, this.pal.accent, sp.type === 'bladecombo' ? 70 : 45, 10, this.facing);
+    }
+    if ((sp.type === 'vinelash' || sp.type === 'earthspike') && t === sp.startup) {
+      match.fx.burst(this.x + (sp.type === 'vinelash' ? this.facing*50 : 0)*this.scale,
+        this.y - (sp.type === 'vinelash' ? 60 : 10)*this.scale, this.pal.accent, 10, 3);
+      if (sp.type === 'earthspike') { match.fx.dust(this.x, this.y, 8, '#8eaa69'); match.cam.shake(4); }
+      AUDIO.sfx('swing');
     }
     switch (sp.specialKey) {
       case 'n': {
@@ -1232,6 +1250,7 @@ class Fighter {
         break;
       }
       case 's': {
+        if (sp.type === 'vinedash') this.updateVineDash(match, a, t, s);
         if (sp.type === 'risingdash' && t >= sp.startup && !s.dashFired) {
           s.dashFired = true;
           this.vx = this.facing * 9; this.vy = -7;
@@ -1283,6 +1302,7 @@ class Fighter {
         break;
       }
       case 'u': {
+        if (a.vinePull) break;
         if (sp.type === 'recover') {
           // Tide's wave gathers and circles first. Slow a downward fall during
           // that brief windup so the visual does not cost her the recovery.
@@ -1308,7 +1328,10 @@ class Fighter {
             }
             if (this.key === 'tide' && (t - sp.startup) % 4 === 0)
               match.fx.waterSplash(this.x, this.y + 4 * this.scale, .55, this.pal.accent);
-            if (this.key !== 'tide' && !sp.rocketBoost && (t - sp.startup) % 4 === 0) {
+            if (sp.leafRise && (t-sp.startup)%3===0)
+              match.fx.particle({x:this.x+rand(-35,35)*this.scale,y:this.y-rand(5,75)*this.scale,
+                vx:rand(-2,2),vy:rand(1,3),life:22,size:4*this.scale,color:this.pal.accent,grav:.08,drag:.96,shape:'leaf'});
+            if (this.key !== 'tide' && !sp.rocketBoost && !sp.leafRise && (t - sp.startup) % 4 === 0) {
               match.fx.particle({ x: this.x + rand(-10, 10), y: this.y - 10, vx: rand(-1, 1), vy: rand(1, 3), life: 15, size: this.key === 'grim' ? 6 : 3, color: this.pal.accent, grav: 0, shape: this.key === 'grim' ? 'shard' : 'spark' });
               // A short energy line reads as Rook's drone assist, not a stage tether.
               if (this.key === 'rook') match.fx.lines.push({ x1: this.x, y1: this.y - 55, x2: this.x + this.facing * 18, y2: this.y - 135, color: this.pal.accent, w: 3, life: 5, t: 0 });
@@ -1385,6 +1408,118 @@ class Fighter {
         break;
       }
     }
+  }
+
+  // Bramble Grapple uses the ordinary grab links, but owns the lift/slam
+  // choreography. It never applies the dash hitbox and the slam separately.
+  updateVineDash(match, a, t, state) {
+    if (t >= a.startup && !state.dashFired) {
+      state.dashFired = true; this.vx = this.facing * a.rushSpeed; this.vy = 0;
+      a.slide = a.dist; a.slideFrom = this.x; match.fx.speedLines(this); AUDIO.sfx('dodge');
+    }
+    if (this.grabbing && this.grabbing.vineGrabbed && a.vineGrabAt !== undefined) {
+      const target = this.grabbing;
+      if (target.eliminated || target.grabbedBy !== this) { this.releaseVineGrab(); return; }
+      this.positionVineVictim();
+      if (t - a.vineGrabAt >= a.slamTicks) {
+        this.releaseVineGrab();
+        target.onGround = false; target.onPlatform = null;
+        const stale = this.staleMult('specials'); this.pushStale('specials');
+        match.hitFighter(this, target, {damage:a.damage*stale,bkb:a.bkb,kbs:a.kbs,
+          angle:this.facing < 0 ? 180-a.angle : a.angle});
+        match.fx.dust(target.x,target.y,10,this.pal.accent);
+        match.fx.ring(target.x,target.y,this.pal.accent,55,14);
+        match.cam.shake(6); AUDIO.sfx('throw');
+      }
+      return;
+    }
+    if (a.vineAttemptSpent || t < a.startup || t >= a.startup + a.active) return;
+    const reach = a.vineReach * Math.min(1,(t-a.startup+1)/4) * this.scale;
+    const box = {x:this.facing>0?this.x:this.x-reach,y:this.y-105*this.scale,w:reach,h:115*this.scale};
+    let target=null, best=Infinity;
+    for (const f of match.fighters) {
+      if (f===this || f.eliminated || f.invincible || f.state==='respawn' || f.state==='ledge' ||
+          f.grabbedBy || f.grabbing || match.sameTeam(this,f) || !aabb(box,f.hurtbox)) continue;
+      const d=(f.x-this.x)*this.facing;
+      if (d>=0 && d<best) {target=f;best=d;}
+    }
+    if (!target) return;
+    a.vineAttemptSpent=true; a.vineGrabAt=t;
+    a.vineStartX=target.x-this.x; a.vineStartY=target.y-this.y;
+    a.dur=Math.max(a.dur,t+a.slamTicks+8);
+    this.vx=0; a.slide=0; this.grabbing=target; target.grabbedBy=this;target.vineGrabbed=true;
+    target.state='grabbed';target.action=null;target.charging=false;target.chargeT=0;
+    target.shieldHP=0;target.shielding=false;target.counterActive=false;target.hitstun=0;target.hitlag=0;
+    target.onGround=false;target.onPlatform=null;target.vx=target.vy=0;
+    match.fx.text(target.x,target.y-120,'GRAB',this.pal.accent,22);AUDIO.sfx('grab');
+  }
+  positionVineVictim() {
+    const a=this.action, target=this.grabbing;
+    if (!a || !target || target.grabbedBy!==this) return;
+    const elapsed=Math.max(0,this.actionT-a.vineGrabAt), lift=Math.min(1,elapsed/10);
+    const slam=clamp((elapsed-10)/Math.max(1,a.slamTicks-10),0,1);
+    target.x=this.x+lerp(a.vineStartX,this.facing*55*this.scale,lift);
+    target.y=this.y+(slam>0?lerp(-125*this.scale,-2*this.scale,slam*slam):lerp(a.vineStartY,-125*this.scale,lift));
+    target.vx=target.vy=0;
+  }
+  releaseVineGrab() {
+    const target=this.grabbing;this.grabbing=null;
+    if (!target) return;
+    target.vineGrabbed=false;
+    if (target.grabbedBy===this) {
+      target.grabbedBy=null;
+      if (target.state==='grabbed') {target.state='fall';target.onGround=false;target.hitstun=0;}
+    }
+  }
+
+  // Cast straight down from the feet against the deck and soft platforms. A
+  // recovery above a landing surface stays a normal upward recovery; open air
+  // (including below the island) can use a nearby ledge instead.
+  hasSurfaceBelow(stage) {
+    const gd = stage.ground;
+    if (this.x >= gd.x && this.x <= gd.x + gd.w && this.y <= gd.y) return true;
+    return stage.platforms.some(p => {
+      const x = p.cx !== undefined ? p.cx : p.x, y = p.cy !== undefined ? p.cy : p.y;
+      return this.x >= x && this.x <= x + p.w && this.y <= y;
+    });
+  }
+  tryVineTether(match, a) {
+    if (this.onGround || this.ledgeCD > 0 || this.input.down || match.stage.ledges === false ||
+        this.hasSurfaceBelow(match.stage)) return;
+    const gd = match.stage.ground;
+    const edges = [{side:-1, x:gd.x}, {side:1, x:gd.x+gd.w}]
+      .map(e => ({...e, distance:Math.hypot(this.x-e.x,this.y-55*this.scale-gd.y)}))
+      .filter(e => e.distance <= a.tetherRange*this.scale && !match.fighters.some(f =>
+        f !== this && !f.eliminated && f.state === 'ledge' && f.ledge && f.ledge.side === e.side))
+      .sort((a,b) => a.distance-b.distance);
+    if (!edges.length) return;
+    const {side, x:edgeX} = edges[0];
+    // Below the island, first move around the underside instead of pulling
+    // straight through the solid deck. Above/beside it, a straight pull is safe.
+    const underDeck = this.x > gd.x && this.x < gd.x+gd.w && this.y > gd.y;
+    if (underDeck && this.y < gd.y+gd.h+14) return;
+    a.vinePull={side,edgeX,edgeY:gd.y,startX:this.x,startY:this.y,t:0,duration:16,underDeck};
+    this.onGround=false;this.onPlatform=null;this.vx=this.vy=0;
+    match.fx.ring(edgeX,gd.y,this.pal.accent,24,12);AUDIO.sfx('grab');
+  }
+  stepVinePull(match) {
+    const a=this.action,p=a && a.vinePull,gd=match.stage.ground;
+    if (!p) return;
+    if (match.stage.ledges===false || this.ledgeCD>0 || match.fighters.some(f=>f!==this && !f.eliminated && f.state==='ledge' && f.ledge && f.ledge.side===p.side)) {
+      a.vinePull=null;this.stepAction(match);return;
+    }
+    const u=Math.min(1,++p.t/p.duration), ease=t=>t*t*(3-2*t);
+    const endX=p.edgeX+p.side*30*this.scale;
+    let nx,ny;
+    if (p.underDeck) {
+      // First clear the side wall horizontally, then ascend to the hang point.
+      const horizontal=ease(Math.min(1,u*2)), vertical=ease(Math.max(0,u*2-1));
+      nx=lerp(p.startX,endX,horizontal);ny=lerp(p.startY,gd.y-8,vertical);
+    } else {
+      nx=lerp(p.startX,endX,ease(u));ny=lerp(p.startY,gd.y-8,ease(u));
+    }
+    this.vx=nx-this.x;this.vy=ny-this.y;this.x=nx;this.y=ny;
+    if (u>=1) this.snapLedge(match,p.side,p.edgeX);
   }
 
   // Skyward Ascent only follows up on fighters struck by its opening hit. Each
@@ -1528,7 +1663,7 @@ class Fighter {
         // The new signature attacks use facing-relative launch angles, just as
         // their hitboxes mirror. A left-facing strike must launch left, not right.
         const signature = a.finish || a.key === 'dashattack' ||
-          (a.type === 'special' && ['bladecombo', 'flurry', 'punchcombo', 'quake', 'risingdash', 'dash', 'soulreap'].includes(a.specialType));
+          (a.type === 'special' && ['bladecombo', 'flurry', 'punchcombo', 'quake', 'risingdash', 'dash', 'soulreap', 'vinelash'].includes(a.specialType));
         const launchLeft = a.specialType === 'quake' ? target.x < this.x : this.facing < 0;
         const hitAngle = signature && launchLeft ? 180 - hit.angle : hit.angle;
         match.hitFighter(this, target, {
@@ -1579,6 +1714,8 @@ class Fighter {
     // A rising recovery can catch the lip from below, while a normal rising
     // jump stays free of accidental snaps on its way up.
     const risingRecovery = this.state === 'special' && this.action && this.action.specialKey === 'u';
+    // Briar visibly tethers instead of instantly snapping before her startup.
+    if (risingRecovery && this.action.vineTether && (!this.action.vineChecked || this.action.vinePull)) return false;
     if (this.vy < -1 && !risingRecovery) return false;
     const gd = match.stage.ground;
     for (const e of [{ side: -1, x: gd.x }, { side: 1, x: gd.x + gd.w }]) {
@@ -1594,6 +1731,7 @@ class Fighter {
     return false;
   }
   snapLedge(match, side, edgeX) {
+    if (this.grabbing && this.grabbing.vineGrabbed) this.releaseVineGrab();
     // Preserve a fresh jump pressed during an up-special just before catching
     // the ledge. The jump used to activate jump+G was already consumed.
     const recoveryJump = this.state === 'special' && this.action && this.action.specialKey === 'u'
@@ -1697,7 +1835,14 @@ class Fighter {
     }
     // damage pulses
     const pulseRate = 10;
-    if (fs.type === 'barrage') {
+    if (fs.type === 'grove') {
+      // Four readable waves of thorns, each with a single area hit.
+      if (t >= 20 && t <= 110 && (t-20)%30 === 0) {
+        match.fx.thornField(this.x, this.y, 190, this.pal.accent);
+        match.aoeHit(this, this.x, this.y, 190, fs.damage/4, 15, 38, 75, {final:1});
+        match.cam.shake(6); AUDIO.sfx('hit', {power:.55});
+      }
+    } else if (fs.type === 'barrage') {
       if (t % 15 === 0 && t <= fs.duration - 30) {
         for (const side of [-1, 1]) match.spawnProjectile({owner:this,
           x:this.x + side*20*this.scale, y:this.y - 85*this.scale,
@@ -1755,7 +1900,9 @@ class Fighter {
     if (this.held) { this.held.heldBy = null; this.held.dead = true; this.held = null; }
     this.hasSmashBall = false;
     this.buffs = { star: 0, mushroom: 0, poison: 0, metal: 0, bunny: 0, flower: 0 };
-    this.grabbedBy = null; this.grabbing = null;
+    if (this.grabbing && this.grabbing.vineGrabbed) this.releaseVineGrab();
+    if (this.grabbedBy && this.vineGrabbed && this.grabbedBy.grabbing === this) this.grabbedBy.grabbing = null;
+    this.vineGrabbed = false; this.grabbedBy = null; this.grabbing = null;
     this.ledge = null; this.finalActive = 0; this.hazardCD = 0; this.itemCd = 0;
     this.vectorLockTarget = null; this.vectorLockT = 0;
     this.action = null;
