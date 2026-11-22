@@ -407,7 +407,34 @@ FIGHTERS.briar = {
   grabRange:48,throwDmg:{f:7,b:9,u:8,d:7}
 };
 
-const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow', 'tide', 'vector', 'briar'];
+/* NOMAD — a caped frontier gunner with a grappling-hook recovery. */
+FIGHTERS.nomad = {
+  key:'nomad', artFacing:1, name:'NOMAD', title:'THE RIFT RANGER', archetype:'Ranged / Mobility',
+  description:'A wandering armored gunner who fires rapid bolts, strikes with his rifle and hooks distant ledges.',
+  color:'#65caff', theme:'#d5a16a', body:{w:46,h:108},
+  stats:{weight:99,walk:2.3,run:6.1,air:4.4,fall:11.2,fastfall:18,gravity:.59,jumps:2,jumpV:12.4,djumpV:11.8,airJumps:1,size:1,traction:.54,airAccel:.33,dashFrames:10},
+  locomotion:'humanoid',weapon:'fists',weaponLen:0,
+  palettes:[
+    pal('Frontier','#c59b6a','#f7d6a0','#3b3435','#a47a55','#65caff','#241e24'),
+    pal('Arctic','#b6cbd6','#e6f6ff','#344a5d','#798fa1','#8debff','#202f41'),
+    pal('Ember','#c59b6a','#f4c5a2','#51343a','#a36754','#ff835d','#302127'),
+    pal('Forest','#abb593','#e3e9c5','#334b3b','#748967','#b3e780','#202d26'),
+    pal('Dusk','#b8a7c3','#e9d9ef','#42344c','#806d8e','#d6a5ff','#272132'),
+    pal('Shadow','#999eaa','#d9dbe1','#252b36','#596574','#9dbbff','#161b22')
+  ],
+  // Independent copies: the tuning pass replaces these without altering Vector.
+  moves:Object.fromEntries(Object.entries(FIGHTERS.vector.moves).map(([k,v])=>[k,{...v,name:({jab:'Rifle Jab',ftilt:'Rifle Sweep',utilt:'Rising Strike',dtilt:'Low Sweep',dashattack:'Frontier Rush',fsmash:'Heavy Rifle',usmash:'Sky Strike',dsmash:'Ground Sweep',nair:'Aerial Sweep',fair:'Forward Strike',bair:'Reverse Strike',uair:'Overhead Strike',dair:'Falling Strike'})[k]}])),
+  specials:{
+    neutral:{name:'RAPID FIRE',desc:'Hold G to fire a stream of fast energy shots',type:'rapidfire',frames:27,startup:4,active:1,damage:2.5,bkb:4,kbs:17,angle:12,shotInterval:6,projectileSpeed:18,projectileLife:50},
+    side:{name:'RIFLE RUSH',desc:'Dash forward and strike with the rifle',type:'dash',gunRush:true,frames:44,startup:7,active:11,damage:12,bkb:24,kbs:58,angle:42,rushSpeed:13,dist:160,hitboxes:[hb(12,-82,80,66)]},
+    up:{name:'HOOK ROLL',desc:'Roll upward or grapple to a nearby ledge when over open air',type:'recover',frames:44,startup:4,active:14,damage:8,bkb:16,kbs:45,angle:82,rise:10.5,drift:4.5,vineTether:true,hookTether:true,tetherRange:351,queueRecoveryJump:true,hitboxes:[hb(-40,-98,80,85)]},
+    down:{name:'ENERGY SLASH',desc:'Sweep with a close-range energy blade',type:'vinelash',frames:40,startup:8,active:5,damage:11,bkb:22,kbs:60,angle:40,hitboxes:[hb(8,-80,95,65)]}
+  },
+  finalSmash:{name:'FRONTIER BARRAGE',type:'barrage',duration:150,damage:48},
+  grabRange:46,throwDmg:{f:8,b:10,u:8,d:7}
+};
+
+const FIGHTER_KEYS = ['valor', 'grim', 'astra', 'vesper', 'rook', 'marrow', 'tide', 'vector', 'briar', 'nomad'];
 
 /* ============================================================
    FRAME-DATA TUNING PASS  —  one place, so every fighter moves alike

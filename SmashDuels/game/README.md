@@ -302,3 +302,19 @@ The supplied sheet is in `../assets-src/characters/briar-sheets/`.
 `tools/build_briar.py` (Pillow, NumPy, SciPy) keys and packs its curated poses.
 The sheet has no separate idle or ledge pose: the idle uses the first whip
 stance, and the separately generated ledge sprite is anchored by its hand.
+
+### Nomad
+
+Nomad, the Rift Ranger, is an armored frontier gunner:
+
+- **Hold G — Rapid Fire:** fire a stream of energy shots; tapping fires once.
+- **Side + G — Rifle Rush:** dash forward and strike with the rifle.
+- **Up + G — Hook Roll:** roll upward; over open air, a grappling hook pulls
+  him to a nearby available ledge, using the same range and surface rules as
+  Briar's tether. A fresh jump during recovery is buffered.
+- **Down + G — Energy Slash:** sweep the space in front of him.
+- **Final Smash — Frontier Barrage:** launches a wide volley.
+
+The supplied sheets are in `../assets-src/characters/nomad-sheets/`.
+`tools/build_nomad.py` (Pillow, NumPy, SciPy) builds the curated atlas. The
+separately generated gun-strike and ledge poses supplement the supplied sheets.

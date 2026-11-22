@@ -7,7 +7,7 @@
 const Modes = (() => {
   let current = null;   // {kind, ...state}
 
-  const CLASSIC_ORDER = ['grim', 'vesper', 'astra', 'rook', 'valor', 'marrow', 'tide', 'vector', 'briar'];
+  const CLASSIC_ORDER = ['grim', 'vesper', 'astra', 'rook', 'valor', 'marrow', 'tide', 'vector', 'briar', 'nomad'];
 
   /* ---------------- Classic Mode ---------------- */
   function startClassic(fighterKey, palIdx, level) {

@@ -123,3 +123,5 @@
 @media (prefers-reduced-motion: reduce) {
   #screen-select *, #screen-select *::before, #screen-select *::after { animation: none !important; transition: none !important; }
 }
+
+#screen-select[data-fighter="nomad"] .showcase-atmosphere::before { background: radial-gradient(circle,#e7bd82 0 2px,transparent 5px) 0 0 / 83px 90px, radial-gradient(circle,#65caff 0 1px,transparent 4px) 32px 15px / 69px 80px; animation-duration: 10s; }
