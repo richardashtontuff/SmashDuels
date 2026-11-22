@@ -16,13 +16,13 @@ SRC = ROOT / 'assets-src/ledge-proposals'
 OUT = ROOT / 'game/assets/ledge'
 # Reference hand coordinates in the original approved images (source pixels).
 HAND = {'valor': (782, 21), 'grim': (1001, 22), 'astra': (877, 82),
-        'vesper': (621, 355), 'rook': (773, 26), 'marrow': (801, 117)}
+        'vesper': (621, 355), 'rook': (773, 26), 'marrow': (801, 117), 'tide': (787, 28)}
 
 def build(key, hand):
     im = Image.open(SRC / (key + '.png')).convert('RGB')
     rgb = np.asarray(im).astype(np.int16)
     r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
-    if key == 'marrow':
+    if key in ('marrow', 'tide'):
         # Marrow was generated on green, not the other poses' magenta backdrop.
         alpha = np.clip((38 - np.minimum(g - np.maximum(r,b), g - 90))/30, 0, 1)
     else:
@@ -53,4 +53,4 @@ def build(key, hand):
 if __name__ == '__main__':
     meta = {key: build(key, hand) for key, hand in HAND.items()}
     (OUT / 'anchors.json').write_text(json.dumps(meta, indent=2) + '\n')
-    print('Built six ledge sprites and hand anchors.')
+    print('Built seven ledge sprites and hand anchors.')

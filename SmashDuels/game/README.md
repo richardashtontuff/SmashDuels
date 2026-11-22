@@ -242,3 +242,20 @@ The hanging art uses the five approved AI-generated pose concepts in
 `assets-src/ledge-proposals/`; keyed runtime sprites and hand anchors live in
 `game/assets/ledge/`. The source concepts for Valor and Grim touch the image
 edge, so those cut-off pixels cannot be reconstructed by the keying process.
+
+### Tide
+
+Tide, the Wave Warden, joins the roster with **Tidal Wave** (neutral special),
+**Surge Step** (side special), **Geyser Leap** (up special), and **Ocean Guardian**
+(down-special counter). Hold G and release to send a wave along the surface;
+it lasts twice as long as the hold (minimum 18 ticks for a tap; a five-second
+hold yields a ten-second wave). It can hit repeatedly, knocks opponents back,
+and fades before expiring. Airborne waves fall onto surfaces;
+waves also fall off platform edges. Geyser Leap sends water down from Tide’s back, curls it beneath her feet,
+then launches her on a vertical geyser; her landings spray droplets. Her supplied sheet is in `../assets-src/characters/tide-sheets/`.
+`tools/build_tide.py` (Pillow, NumPy, SciPy) keys hand-selected frames, adds the
+knife to poses where it was missing, and builds her atlas and portrait. The idle
+and ledge poses are generated adaptations; the action sheet does not contain a
+complete set of normal attacks or a hanging pose, so some actions reuse related
+poses and a single anchored ledge pose sways. Effects in the original sheet
+sometimes overlap neighboring poses and have been cropped where necessary.

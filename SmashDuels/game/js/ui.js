@@ -218,6 +218,49 @@ const UI = (() => {
     $('#cpu-level').addEventListener('input', e => { rules.aiLevel = +e.target.value; vsCPULevel = +e.target.value; renderSelect(); });
   }
 
+  // Backdrops are decorative interpretations, not playable stage names.
+  const PROFILE_VIBES = {
+    valor: 'RIFT<br>FORGED', grim: 'ANCIENT<br>STONE', astra: 'BORN OF<br>STARLIGHT',
+    vesper: 'AFTER<br>DARK', rook: 'RIFT<br>DOJO', marrow: 'SPECTRAL<br>RUINS', tide: 'OCEAN’S<br>CALL',
+  };
+
+  let lastProfileKey = null;
+  function renderFighterProfile(key) {
+    const d = FIGHTERS[key], profile = $('#fighter-profile');
+    profile.setAttribute('aria-label', d.name + ' fighter profile and stats');
+    profile.style.setProperty('--scene', `url("../assets/select/${key}.jpg?v=${BUILD}")`);
+    profile.style.setProperty('--fighter-accent', d.color);
+    if (lastProfileKey !== key) {
+      const screen = $('#screen-select'), showcase = $('#select-showcase');
+      screen.style.setProperty('--scene', `url("../assets/select/${key}.jpg?v=${BUILD}")`);
+      screen.style.setProperty('--fighter-accent', d.color);
+      screen.dataset.fighter = key;
+      const number = String(FIGHTER_KEYS.indexOf(key) + 1).padStart(2, '0');
+      $('#showcase-number').textContent = number;
+      $('#hero-number').textContent = number;
+      showcase.classList.remove('showcase-swap'); void showcase.offsetWidth; showcase.classList.add('showcase-swap');
+      lastProfileKey = key;
+    }
+    $('#profile-number').textContent = String(FIGHTER_KEYS.indexOf(key) + 1).padStart(2, '0') + ' / ' + String(FIGHTER_KEYS.length).padStart(2, '0');
+    $('#profile-vibe').innerHTML = PROFILE_VIBES[key] || 'ENTER<br>THE RIFT';
+    // Use actual base values with a common zero-to-roster-best scale. Weight
+    // affects knockback rather than guaranteeing survival; f-smash is only one
+    // representative attack, not a claim about every move or special.
+    const metrics = [
+      {label:'RUN SPEED', value:f=>f.stats.run, unit:'', precision:1, meaning:'ground run speed'},
+      {label:'AIR SPEED', value:f=>f.stats.air, unit:'', precision:1, meaning:'air movement speed'},
+      {label:'WEIGHT', value:f=>f.stats.weight, unit:'', precision:0, meaning:'weight; higher reduces knockback'},
+      {label:'F-SMASH', value:f=>f.moves.fsmash.damage, unit:'%', precision:0, meaning:'forward smash base damage'},
+    ];
+    $('#profile-stat-bars').innerHTML = metrics.map(m => {
+      const value = m.value(d), max = Math.max(...FIGHTER_KEYS.map(k => m.value(FIGHTERS[k])));
+      const shown = value.toFixed(m.precision), high = max.toFixed(m.precision);
+      const percent = Math.max(0, Math.min(100, value / max * 100));
+      return `<div class="profile-stat"><div class="profile-stat-label"><span>${m.label}</span><b>${shown}${m.unit}</b></div>
+        <div class="profile-stat-track" role="meter" aria-label="${m.meaning}" aria-valuemin="0" aria-valuemax="${max}" aria-valuenow="${value}" aria-valuetext="${shown}${m.unit} out of ${high}${m.unit}, roster best"><span style="width:${percent}%"></span></div></div>`;
+    }).join('');
+  }
+
   function renderSelect() {
     const tabs = [];
     for (let i = 0; i < activeSlots; i++) tabs.push(`<button data-slot="${i}" class="${i === selSlot ? 'on' : ''}" style="--c:${PLAYER_COLORS[i]}" aria-pressed="${i === selSlot}">P${i + 1}${isCPU[i] ? ' · CPU' : ''}</button>`);
@@ -226,6 +269,7 @@ const UI = (() => {
 
     $$('#fighter-grid .fcell').forEach(c => { const selected = c.dataset.key === fighters[selSlot]; c.classList.toggle('sel', selected); c.setAttribute('aria-pressed', selected); });
     const d = FIGHTERS[fighters[selSlot]];
+    renderFighterProfile(fighters[selSlot]);
     $('#hero-player').textContent = `P${selSlot + 1} / ${isCPU[selSlot] ? 'CPU' : 'PLAYER'} SELECT`;
     $('#hero-player').style.setProperty('--player', PLAYER_COLORS[selSlot]);
     $('#hero-name').textContent = d.name;

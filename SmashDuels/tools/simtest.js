@@ -1984,7 +1984,7 @@ test('marrow: Wraith Charge, Grave Ascent and Hollow Guard work through input', 
     assert(b.damage>0, `side special missed facing ${dir}`);
   }
   const x=itemFixture(['marrow','valor']);x.b.x=400;x.a.x=0;x.a.y=-130;x.a.onGround=false;x.a.state='fall';const y=x.a.y;
-  x.set({up:true,special:true});x.ctl.tick(1);x.set({});x.ctl.tick(14);
+  x.set({up:true,special:true});x.ctl.tick(1);x.set({});x.ctl.tick(27);
   assert(x.a.usedUpB && x.a.y<y-50, 'up special failed to recover');
   const z=itemFixture(['marrow','valor']);z.b.x=55;
   z.set({down:true,special:true});z.ctl.tick(1);z.set({});z.ctl.tick(4);
@@ -1998,6 +1998,190 @@ test('marrow: melee items preserve F attacks and CPU fights remain finite', () =
   assert(a.action && a.action.type==='move' && a.action.itemPerk==='reach','weapon did not modify his F attack');
   const {ctx}=run();const match=newMatch(ctx,cast(4,['marrow','valor','grim','marrow'],{cpu:true}),'foundry',{rules:{items:'none'}});
   for(let i=0;i<1200;i++) {match.update(); for(const f of match.fighters) assert(Number.isFinite(f.x)&&Number.isFinite(f.y), 'nonfinite CPU fighter');}
+});
+
+/* Tide: drive her actual player inputs and shared defensive resolver. */
+test('tide: save migration and classic roster', () => {
+  const vm=require('vm');const {ctx,sandbox}=run();
+  sandbox.localStorage.setItem('rift-rumble-save-v1',JSON.stringify({unlocked:['valor','marrow'],coins:123,settings:{music:false}}));
+  const save=vm.runInContext('SAVE.load()',ctx);
+  assert(save.unlocked.includes('tide') && save.unlocked.includes('marrow') && save.coins===123 && !save.settings.music,'save migration');
+  sandbox.Game={startMatch:opts=>{sandbox.lastClassic=opts;}};sandbox.UI={toast:()=>{}};
+  require('./harness').load(ctx,['js/modes.js']);
+  for(const key of ['valor','grim','astra','vesper','rook','marrow','tide']) {
+    vm.runInContext(`Modes.startClassic('${key}',0,5)`,ctx);
+    const stages=vm.runInContext('Modes.current.stages',ctx);
+    assert(stages.slice(0,4).every(s=>s.enemy!==key && !!s.enemy),key+' has invalid opponent');
+  }
+  vm.runInContext("Modes.startClassic('marrow',0,5)",ctx);
+  assert(vm.runInContext('Modes.current.stages.some(s=>s.enemy==="tide")',ctx),'Tide missing from classic');
+  for(const mode of ['startTargets','startHomeRun','startMultiMan']) {
+    vm.runInContext(`Modes.${mode}('tide',0)`,ctx);
+    assert(sandbox.lastClassic.cast[0].key==='tide',mode+' does not select Tide');
+  }
+});
+
+test('tide: Surge Step hits once, respecting defenses', () => {
+  for(const side of [-1,1]) for(const special of ['side']) for(const mode of ['hit','shield','team','invincible','counter','miss']) {
+    const {m,a,b,ctl,set}=itemFixture(['tide','valor']);a.facing=side;b.x=side*(mode==='miss'?1000:(special==='side'?100:60));
+    if(mode==='team')m.sameTeam=()=>true;
+    if(mode==='invincible')b.invincT=100;
+    const read=m.readPlayerInput;if(mode==='shield')m.readPlayerInput=f=>f===b?{shield:true}:read(f);
+    let hits=0;const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    set(Object.assign({special:true},special==='side'?{left:side<0,right:side>0}:{}));ctl.tick(1);set({});
+    for(let i=0;i<55;i++){if(mode==='counter'&&!b.counterHit)b.counterActive=true;ctl.tick(1);}
+    assert(mode==='hit'?hits===1 && b.damage>0:hits===0,`${side} ${special} ${mode}: ${hits} hits`);
+  }
+});
+
+test('tide: holding and releasing G sets wave lifetime, direction and fade', () => {
+  for(const side of [-1,1]) for(const hold of [1,30,90,300,350]) {
+    const {m,a,b,ctl,set}=itemFixture(['tide','valor']);b.x=900;a.facing=side;
+    set({special:true});ctl.tick(1);ctl.tick(hold);
+    assert(a.charging && m.projectiles.length===0, 'wave fired before release');
+    assert(a.chargeT===Math.min(hold,300),`charge ${a.chargeT}`);
+    set({});ctl.tick(a.def.specials.neutral.startup+1);
+    const p=m.projectiles.find(p=>p.kind==='tidewave');
+    assert(p && p.life===Math.max(18,Math.min(hold,300)*2),`wrong life ${hold} ${p && p.life}`);
+    assert(Math.sign(p.vx)===side && p.surface===m.stage.ground,'ground wave direction/surface');
+    const x=p.x; const tickAtStart=p.t;
+    // Isolate lifetime from blast-zone/edge/target interactions.
+    m.stage.ground.x=-10000;m.stage.ground.w=20000;m.blast.left=-20000;m.blast.right=20000;
+    for(let j=tickAtStart;j<p.life;j++) { p.update(m);assert(!p.dead,'wave faded too early'); }
+    assert((p.x-x)*side>0, 'wave did not travel');
+    p.update(m); assert(p.dead, 'wave did not expire');
+  }
+});
+
+test('tide: wave persists through fighters and re-hits without bypassing defenses', () => {
+  for(const side of [-1,1]) for(const mode of ['hit','shield','team','invincible']) {
+    const {m,a,b,ctl,set}=itemFixture(['tide','valor']);a.facing=side;b.x=side*45;
+    if(mode==='team')m.sameTeam=()=>true;if(mode==='invincible')b.invincT=200;
+    const read=m.readPlayerInput;if(mode==='shield')m.readPlayerInput=f=>f===b?{shield:true}:read(f);
+    let hits=0;const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    set({special:true});ctl.tick(45);set({});
+    let wave;for(let i=0;i<25;i++){if(mode==='counter'&&!b.counterHit)b.counterActive=true;ctl.tick(1);wave=wave||m.projectiles.find(p=>p.kind==='tidewave');}
+    assert(wave && !wave.dead,`${side} ${mode} wave died on contact`);
+    assert(mode==='hit'?hits>=2:hits===0,`${side} ${mode}: ${hits} hits`);
+  }
+});
+
+test('tide: wave hits produce real projectile-like recoil that scales with damage', () => {
+  function impact(key, side, initialDamage) {
+    const {m,a,b,ctl,set}=itemFixture([key,'valor']);a.facing=side;b.x=side*75;b.damage=initialDamage;
+    let result=null;const hit=m.hitFighter.bind(m);
+    m.hitFighter=(x,y,o)=>{hit(x,y,o);if(x===a && y===b && !result)
+      result={vx:b.vx,vy:b.vy,stun:b.hitstun,state:b.state,damage:b.damage,kind:o.proj && o.proj.kind};};
+    set({special:true});ctl.tick(31);set({});
+    for(let i=0;i<35 && !result;i++)ctl.tick(1);
+    assert(result,`${key} did not hit ${side}`);return {result,m,b};
+  }
+  for(const side of [-1,1]) {
+    const low=impact('tide',side,0), high=impact('tide',side,100), blast=impact('marrow',side,0);
+    assert(low.result.kind==='tidewave' && low.result.damage===2,'wave did not deal projectile damage');
+    assert(low.result.state==='launch' && low.result.stun>0 && low.result.vx*side>4 && low.result.vy<0,'no visible directional recoil');
+    assert(Math.hypot(low.result.vx,low.result.vy)>Math.hypot(blast.result.vx,blast.result.vy)*.5,'recoil is too weak relative to Soul Reap');
+    assert(Math.hypot(high.result.vx,high.result.vy)>Math.hypot(low.result.vx,low.result.vy),'damage did not scale knockback');
+    assert(low.m.projectiles.some(p=>p.kind==='tidewave'&&!p.dead),'impact destroyed the wave');
+  }
+});
+
+test('tide: wave hits multiple opponents, not someone behind, and interacts with targets', () => {
+  for(const side of [-1,1]) {
+    const {ctx}=run(), m=newMatch(ctx,cast(4,['tide','valor','grim','rook']),'terminal',{rules:{items:'none'}});
+    const [a,b,c,behind]=m.fighters;
+    for(const f of m.fighters){f.y=0;f.onGround=true;f.state='idle';f.spawnProtect=0;f.invincT=0;f.vx=f.vy=0;}
+    a.x=0;a.facing=side;b.x=side*90;c.x=side*180;behind.x=-side*100;
+    m.targets=[{x:side*240,y:-35,hp:1,dead:false}];let input={};
+    const ctl=control(m,(f,i)=>i===0?input:{});input={special:true};ctl.tick(60);input={};ctl.tick(65);
+    assert(b.damage>0 && c.damage>0 && behind.damage===0,`wave did not sweep forwards across opponents: ${side} ${b.damage} ${c.damage} ${behind.damage}`);
+    assert(m.targets[0].dead, 'wave did not hit target-mode target');
+  }
+});
+
+test('tide: a counter intercepts the wave without destroying it', () => {
+  const {m,a,b,ctl,set}=itemFixture(['tide','valor']);b.x=45;
+  set({special:true});ctl.tick(40);set({});b.startSpecial('d',m);ctl.tick(10);
+  assert(a.damage>0 && b.damage===0,'counter did not intercept the wave');
+  assert(m.projectiles.some(p=>p.kind==='tidewave'&&!p.dead),'counter destroyed the wave');
+});
+
+test('tide: wave falls from platforms and airborne casts land on the surface', () => {
+  const {m,a}=itemFixture(['tide','valor']);const plat=m.stage.platforms[0];
+  const p=m.spawnProjectile({kind:'tidewave',owner:a,x:plat.x+plat.w-3,y:plat.y,vx:5,vy:0,life:160,fadeFrames:18,rehit:12,damage:2,bkb:3,kbs:2,angle:35,surface:plat});
+  p.update(m);assert(!p.surface && p.y>plat.y,'did not leave platform');
+  for(let i=0;i<45 && !p.surface;i++) p.update(m);
+  assert(p.surface===m.stage.ground && p.y===m.stage.ground.y,'wave did not land on main stage');
+  const airborne=m.spawnProjectile({kind:'tidewave',owner:a,x:0,y:-55,vx:0,vy:0,life:100,fadeFrames:18,rehit:12,damage:2,bkb:3,kbs:2,angle:35,surface:null});
+  for(let i=0;i<30 && !airborne.surface;i++) airborne.update(m);
+  assert(airborne.surface===m.stage.ground,'airborne wave failed to land');
+});
+
+test('tide: charge interrupt and landing droplets', () => {
+  const {m,a,b,ctl,set}=itemFixture(['tide','valor']);b.x=500;
+  set({special:true});ctl.tick(12);assert(a.charging,'not charging');
+  m.hitFighter(b,a,{damage:1,bkb:20,kbs:0,angle:60});set({});ctl.tick(70);
+  assert(!m.projectiles.some(p=>p.kind==='tidewave'),'interrupted charge released wave');
+  a.hitstun=0;a.state='fall';a.y=-5;a.vy=7;a.onGround=false;
+  const before=m.fx.parts.filter(p=>p.shape==='droplet').length;a.landOn(m.stage.ground.y,m,false);
+  assert(m.fx.parts.filter(p=>p.shape==='droplet').length>before,'landing has no droplets');
+});
+
+test('tide: run reversals remain responsive', () => {
+  const {ctx}=run();const m=newMatch(ctx,cast(1,['tide']),'terminal');
+  const f=m.fighters[0];f.x=0;f.y=m.stage.ground.y;f.onGround=true;f.state='idle';let dir=1;
+  const ctl=control(m,()=>({right:dir>0,left:dir<0}));ctl.tick(30);
+  for(const d of [-1,1,-1,1]) {dir=d;ctl.tick(1);assert(f.facing===d && f.state==='turn','no braced turn');
+    ctl.tick(7);assert(f.vx*d>0 && f.state==='run','turn did not flow into running');ctl.tick(20);}
+});
+
+test('tide: loop completes before takeoff and preserves airborne recovery', () => {
+  for(const airborne of [false,true]) {
+    const {ctx}=run();const m=newMatch(ctx,cast(2,['tide','valor']),'terminal',{rules:{items:'none'}});
+    const [a,b]=m.fighters;const ground=m.stage.ground.y;
+    a.x=0;a.y=airborne?-300:ground;a.vx=0;a.vy=airborne?16:0;a.onGround=!airborne;a.state=airborne?'fall':'idle';a.spawnProtect=0;
+    b.x=40;b.y=a.y;b.onGround=!airborne;b.spawnProtect=0;b.invincT=0;const startY=a.y;
+    let input={up:true,special:true};const ctl=control(m,(f,i)=>i===0?input:{});
+    ctl.tick(1);input={};const startup=a.def.specials.up.startup;
+    ctl.tick(startup-1);
+    assert(b.damage===0,'recovery struck during the loop');
+    if(!airborne) assert(a.onGround && Math.abs(a.y-ground)<.01,'lift started before the loop completed');
+    else assert(a.y<startY+40,'falling too far during windup');
+    const before=a.y;ctl.tick(1);assert(a.y<before && a.vy<0,'wave did not push at takeoff');
+    let peak=a.y;for(let t=0;t<30;t++){ctl.tick(1);peak=Math.min(peak,a.y);}
+    assert(peak<before-85,'recovery did not gain height');
+  }
+  const z=itemFixture(['tide','valor']);z.b.x=500;z.set({up:true,special:true});z.ctl.tick(5);z.set({});
+  z.m.hitFighter(z.b,z.a,{damage:2,bkb:12,kbs:0,angle:40});z.ctl.tick(30);
+  assert(!z.a.action || z.a.action.specialKey!=='u','interrupted wave kept lifting');
+  const {m,a}=itemFixture(['tide','valor']);a.y=-300;a.onGround=false;a.state='fall';
+  assert(a.startSpecial('u',m),'first recovery failed');a.action=null;a.state='fall';
+  assert(!a.startSpecial('u',m),'second recovery used in midair');
+  a.vy=5;a.landOn(m.stage.ground.y,m,false);assert(!a.usedUpB,'landing did not reset recovery');
+  assert(a.startSpecial('u',m),'recovery did not reset after landing');
+});
+
+test('tide: Geyser Leap hits once and respects defenses on both sides', () => {
+  for(const side of [-1,1]) for(const mode of ['hit','shield','team','invincible','counter']) {
+    const {m,a,b,ctl,set}=itemFixture(['tide','valor']);a.facing=side;b.x=side*40;
+    if(mode==='team')m.sameTeam=()=>true;if(mode==='invincible')b.invincT=100;
+    const read=m.readPlayerInput;if(mode==='shield')m.readPlayerInput=f=>f===b?{shield:true}:read(f);
+    let hits=0;const hit=m.hitFighter.bind(m);m.hitFighter=(x,y,o)=>{if(x===a&&y===b)hits++;return hit(x,y,o);};
+    set({up:true,special:true});ctl.tick(1);set({});
+    for(let i=0;i<35;i++){if(mode==='counter'&&!b.counterHit)b.counterActive=true;ctl.tick(1);}
+    assert(mode==='hit'?hits===1:hits===0,`${side} ${mode}: ${hits} hits`);
+  }
+});
+
+test('tide: Geyser Leap, Ocean Guardian, items and CPU', () => {
+  const x=itemFixture(['tide','valor']);x.b.x=400;x.a.y=-130;x.a.onGround=false;x.a.state='fall';const y=x.a.y;
+  x.set({up:true,special:true});x.ctl.tick(1);x.set({});x.ctl.tick(27);
+  assert(x.a.usedUpB && x.a.y<y-50,'Geyser Leap failed');
+  const z=itemFixture(['tide','valor']);z.b.x=55;z.set({down:true,special:true});z.ctl.tick(1);z.set({});z.ctl.tick(4);
+  assert(z.a.counterActive,'guardian counter inactive');z.b.facing=-1;z.b.startAttack('jab',z.m);z.ctl.tick(18);assert(z.a.damage===0 && z.b.damage>0,'guardian did not counter a real strike');
+  const v=itemFixture(['tide','valor']);const it=itemAt(v.m,v.a,'beamsword');v.ctl.tick(1);assert(v.a.held===it,'pickup');v.set({attack:true});v.ctl.tick(1);assert(v.a.action.itemPerk==='reach','item attack');
+  const {ctx}=run();const m=newMatch(ctx,cast(4,['tide','valor','marrow','tide'],{cpu:true}),'foundry',{rules:{items:'none'}});
+  for(let i=0;i<1200;i++){m.update();for(const f of m.fighters)assert(Number.isFinite(f.x)&&Number.isFinite(f.y),'CPU position');}
 });
 
 /* ---------------- entry ---------------- */

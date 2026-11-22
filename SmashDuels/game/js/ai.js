@@ -192,7 +192,9 @@ class CPU {
     const pick = Math.random();
     if (dy < -60 && adx < 100) { this.press.up = 2; this.press.attack = 2; this.attackCd = 26; return; }
     if (adx > 140 && lvl >= 6 && this.specialCd === 0 && chance(0.35)) {
-      this.press[lvl >= 7 ? 'special' : 'special'] = 2; this.specialCd = 90; return;
+      // Tide needs time on the button to send her traveling wave far enough
+      // to reach a distant target; other fighters keep their usual tap.
+      this.press.special = f.key === 'tide' ? 48 : 2; this.specialCd = 90; return;
     }
     if (adx > 90 && chance(0.5)) {
       // smash attack if high damage target (kill confirm)
@@ -202,7 +204,7 @@ class CPU {
     }
     if (adx < 60) {
       if (chance(0.3)) { this.press.attack = 2; }
-      else if (chance(0.2) && this.specialCd === 0) { this.press.special = 2; this.specialCd = 60; }
+      else if (chance(0.2) && this.specialCd === 0) { this.press.special = f.key === 'tide' ? 24 : 2; this.specialCd = 60; }
       else { this.press[dx > 0 ? 'right' : 'left'] = 2; this.press.attack = 2; }
       this.attackCd = 18;
     }

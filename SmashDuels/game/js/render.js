@@ -17,7 +17,7 @@ const Sprites = (() => {
     { hue: 220, alpha: 0.10, light: -0.26 }, // shadow / dark
   ];
   // drawn height per fighter, in world px (the atlas is scaled to match)
-  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126 };
+  const TARGET_H = { valor: 112, grim: 132, astra: 108, vesper: 108, rook: 110, marrow: 126, tide: 108 };
 
   /* ============================================================
      ANIMATION
@@ -757,7 +757,10 @@ const Sprites = (() => {
       if (cfg) { name = cfg.anim; spec = cfg; }
     }
     if (f.state === 'taunt') { name = 'taunt' + (1 + ((f.tauntIdx | 0) % 3)); spec = STATE_ANIM.taunt; }
-    if (f.state === 'run' && (f.dashT | 0) > 0) { name = 'dash'; spec = STATE_ANIM.dash; }
+    // Tide's two dash poses are a special lunge, not steps in her running
+    // cycle. Use the continuous stride instead, including just after a turn.
+    if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide') { name = 'dash'; spec = STATE_ANIM.dash; }
+    if (f.key === 'tide' && f.state === 'turn' && at.anims.turn) { name = 'turn'; spec = STATE_ANIM.turn; }
     if (f.state === 'roll') {
       // roll backwards when rolling against your facing, forwards otherwise
       const back = (f.rollDir || 0) !== 0 && (f.rollDir || 0) !== f.facing;
@@ -795,8 +798,15 @@ const Sprites = (() => {
         // slash during startup, and hold it precisely while the hitbox is live.
         i = attackIndex(f, frames, { k: authored.strike, wind: authored.wind });
       }
+      if (f.key === 'tide' && name === 'uspecial' && act) {
+        // Anticipation, gathering, takeoff and the flight each own a pose;
+        // never advance into the jump before the water has completed its loop.
+        const t = f.actionT | 0, start = act.startup || 1;
+        i = t < 3 ? 0 : t < start ? 1 : t < start + 5 ? 2 :
+          t < start + 10 ? 3 : t < start + 16 ? 4 : 5;
+      }
       if (f.charging) wob = Math.sin((f.chargeT | 0) * 0.42);       // the windup shakes
-      swing = act && act.spinAxe ? null : attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
+      swing = act && (act.spinAxe || (f.key === 'tide' && name === 'uspecial')) ? null : attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
     } else {
       i = rowIndex(c, spec, frames, f.actionT | 0, (act && act.dur) || 1);
       if (spec.pulse) wob = Math.sin(c.t * 0.085) * spec.pulse;
@@ -1342,6 +1352,86 @@ const Sprites = (() => {
     }
   }
 
+  /* Tide's water emerges from her back, curves down behind her and curls
+     just below her feet before changing into a vertical geyser. Coordinates
+     are local to her feet, facing right; the whole effect is mirrored left. */
+  function drawTideRecoveryWater(ctx, f, front) {
+    const a = f.action, t = f.actionT | 0, start = a.startup || 1;
+    if (t < 0 || t >= start + 26) return;
+    const scale = f.scale || 1;
+    ctx.save(); ctx.translate(f.x, f.y); ctx.scale(f.facing * scale, scale);
+
+    // Three connected cubic segments: shoulder -> back -> underfoot loop ->
+    // center of the soles. A growing stroke traces the path over startup.
+    function cubic(p0, p1, p2, p3, q) {
+      const k = 1-q;
+      return {x:k*k*k*p0[0]+3*k*k*q*p1[0]+3*k*q*q*p2[0]+q*q*q*p3[0],
+              y:k*k*k*p0[1]+3*k*k*q*p1[1]+3*k*q*q*p2[1]+q*q*q*p3[1]};
+    }
+    function point(u) {
+      if (u < .48) return cubic([-34,-68],[-54,-67],[-65,-25],[-47,3],u/.48);
+      if (u < .82) return cubic([-47,3],[-38,32],[36,34],[31,11],(u-.48)/.34);
+      return cubic([31,11],[28,-2],[6,-2],[0,7],(u-.82)/.18);
+    }
+    const progress = clamp(t / Math.max(1, start - 1), 0, 1);
+    const loopFade = t < start ? 1 : clamp(1 - (t - start + 1) / 4, 0, 1);
+    if (loopFade > 0) {
+      const steps = 60, end = Math.floor(progress * steps);
+      const paint = (width, color) => {
+        ctx.lineWidth=width;ctx.strokeStyle=color;ctx.lineCap='round';ctx.lineJoin='round';
+        ctx.beginPath();let drawing=false;
+        for (let j=0;j<=end;j++) {
+          const u=j/steps, pt=point(u), isFront=u>=.48;
+          if (isFront!==front) {drawing=false;continue;}
+          if (!drawing) {ctx.moveTo(pt.x,pt.y);drawing=true;}
+          else ctx.lineTo(pt.x,pt.y);
+        }
+        ctx.stroke();
+      };
+      ctx.globalAlpha=.95*loopFade;
+      paint(15,'#087e9d');paint(9,'#4ad4e4');paint(2.5,'#e2ffff');
+      const tip=point(progress), tipFront=progress>=.48 || t<=2;
+      if (tipFront===front) {
+        ctx.fillStyle='#b6faff';ctx.beginPath();ctx.arc(tip.x,tip.y,5,0,TAU);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(tip.x-1,tip.y-1,2,0,TAU);ctx.fill();
+      }
+    }
+
+    // The completed curl compresses underfoot and becomes a vertical jet. Its
+    // top stays attached to the soles while the trailing column extends below.
+    if (!front && t >= start - 1) {
+      const rise=t-start, grow=clamp((rise+2)/7,0,1), fade=clamp((26-rise)/6,0,1);
+      const height=15+95*grow, w=18+16*grow, wob=Math.sin(t*.45)*3*grow;
+      ctx.globalAlpha=.92*fade;
+      ctx.fillStyle='#178caa';ctx.strokeStyle='#8ceef3';ctx.lineWidth=3;
+      // The broad foamy head reaches both feet, including the rear foot in
+      // the source's jump pose; the narrower jet trails down behind her.
+      ctx.beginPath();ctx.moveTo(-45,-1);
+      ctx.bezierCurveTo(-54,-6,-55,-18,-43,-22);
+      ctx.bezierCurveTo(-36,-29,-25,-26,-21,-20);
+      ctx.bezierCurveTo(-13,-30,0,-31,7,-22);
+      ctx.bezierCurveTo(17,-29,30,-25,33,-16);
+      ctx.bezierCurveTo(48,-16,49,-4,35,1);
+      ctx.quadraticCurveTo(25,5,18,5);
+      ctx.bezierCurveTo(18+wob,height*.35,w,height*.65,w+9,height);
+      ctx.quadraticCurveTo(0,height-9,-w-9,height);
+      ctx.bezierCurveTo(-w,height*.65,-18+wob,height*.35,-20,5);
+      ctx.quadraticCurveTo(-31,5,-45,-1);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.fillStyle='#54d6e3';ctx.beginPath();ctx.moveTo(-10,4);
+      ctx.bezierCurveTo(-12,height*.3,-w*.45,height*.67,-w*.55,height);
+      ctx.quadraticCurveTo(0,height-12,w*.55,height);
+      ctx.bezierCurveTo(w*.45,height*.67,12,height*.3,10,4);
+      ctx.quadraticCurveTo(0,-3,-10,4);ctx.fill();
+      ctx.strokeStyle='#e5ffff';ctx.lineCap='round';ctx.lineWidth=3;
+      for (let i=0;i<3;i++) {
+        const x=(i-1)*12, y=8+((t*6+i*23)%Math.max(16,height-8));
+        ctx.beginPath();ctx.moveTo(x,y+12);ctx.quadraticCurveTo(x+4,y+6,x,y);ctx.stroke();
+      }
+      ctx.fillStyle='#ecffff';ctx.beginPath();ctx.arc(-40,-17,3,0,TAU);ctx.arc(-15,-22,2.5,0,TAU);ctx.arc(22,-19,3,0,TAU);ctx.fill();
+    }
+    ctx.restore();
+  }
+
   /* ---- draw a fighter from the roster atlas ----
    *
    * One transform for the whole frame: translate to the fighter's feet, mirror
@@ -1428,11 +1518,13 @@ const Sprites = (() => {
 
     const vi = (f.palIdx || 0) % VARIANTS.length;
     const src = vi === 0 ? at.img : tinted(at, vi);
-    // Back air strikes behind the facing direction. Marrow's authored sweep
-    // faces right, so mirror that row rather than showing a forward slash while
-    // the live hitbox is behind him.
-    const backAir = f.key === 'marrow' && f.state === 'attack' && f.action && f.action.key === 'bair';
+    // Marrow and Tide reuse forward-facing sweep art for back air; mirror it
+    // so the live strike reads on the same side as the hitbox.
+    const backAir = (f.key === 'marrow' || f.key === 'tide') && f.state === 'attack' && f.action && f.action.key === 'bair';
     const dir = f.facing * (def.artFacing === undefined ? 1 : def.artFacing) * (backAir ? -1 : 1);
+
+    const tideRise = f.key === 'tide' && f.state === 'special' && f.action && f.action.specialKey === 'u';
+    if (tideRise) drawTideRecoveryWater(ctx, f, false);
 
     ctx.save();
     const inv = f.invincT > 0 || f.respawnT > 0 || f.buffs.star > 0 || f.spawnProtect > 0;
@@ -1473,11 +1565,11 @@ const Sprites = (() => {
       blit(ctx, at, src, ent, false, sel.vfx);
     }
     ctx.restore();                    // also drops the metal filter
+    if (tideRise) drawTideRecoveryWater(ctx, f, true);
 
-    // Marrow's Soul Reap has an explicit hold-and-release charge. The gauge
-    // makes the capped power legible even when particles are hard to see.
+    // The neutral charge gauge shows Marrow's power or Tide's wave duration.
     const action = f.action;
-    if (f.state === 'special' && action && action.specialType === 'soulreap' && f.charging) {
+    if (f.state === 'special' && action && (action.specialType === 'soulreap' || action.specialType === 'tidewave') && f.charging) {
       const p = clamp(f.chargeT / action.chargeFrames, 0, 1);
       const cx = f.x, cy = f.y - 68 * fs, radius = (30 + 16 * p) * fs;
       ctx.save();
@@ -1488,8 +1580,8 @@ const Sprites = (() => {
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = .95;
       const width = 68 * fs, barY = f.y - 158 * fs;
       ctx.fillStyle = '#121222'; ctx.fillRect(cx - width / 2 - 2, barY - 2, width + 4, 9 * fs + 4);
-      ctx.fillStyle = '#6d2ca8'; ctx.fillRect(cx - width / 2, barY, width, 9 * fs);
-      ctx.fillStyle = p >= 1 ? '#ffffff' : '#d991ff'; ctx.fillRect(cx - width / 2, barY, width * p, 9 * fs);
+      ctx.fillStyle = action.specialType === 'tidewave' ? '#12657c' : '#6d2ca8'; ctx.fillRect(cx - width / 2, barY, width, 9 * fs);
+      ctx.fillStyle = p >= 1 ? '#ffffff' : action.specialType === 'tidewave' ? '#72eef3' : '#d991ff'; ctx.fillRect(cx - width / 2, barY, width * p, 9 * fs);
       if (p >= 1) { ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('MAX', cx, barY - 5); }
       ctx.restore();
     }
