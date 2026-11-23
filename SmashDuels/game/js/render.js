@@ -282,7 +282,7 @@ const Sprites = (() => {
     else if (spec.stride) i = from + (Math.floor(c.p) % span);
     else i = from + ((Math.floor(c.t / step) % span + span) % span);
     if (spec.rev && i > from && i <= to) i = to - (i - from);
-    return clamp(i, 0, n - 1);
+    return clamp(i, from, to);
   }
 
   /* Attacks: anticipation -> strike (held across the whole active window) ->
@@ -757,6 +757,24 @@ const Sprites = (() => {
       if (cfg) { name = cfg.anim; spec = cfg; }
     }
     if (f.state === 'taunt') { name = 'taunt' + (1 + ((f.tauntIdx | 0) % 3)); spec = STATE_ANIM.taunt; }
+    if (f.key === 'vesper') {
+      // His jump sheet starts and ends in crouches; the old fall row is also
+      // grounded poses. Use only the actual airborne cells until he lands.
+      if (f.state === 'jump' || f.state === 'doublejump') {
+        name = 'jump'; spec = { anim: name, from: 1/6, to: 5/6, step: 4, once: 1 };
+      } else if (f.state === 'fall' || f.state === 'fastfall' || f.state === 'helpless' || f.state === 'launch') {
+        name = 'jump'; spec = { anim: name, from: 4/6, to: 5/6, step: 6, once: 1 };
+      } else if (f.state === 'crouch' || f.state === 'turn') {
+        // The second derived crouch frame is actually a jump takeoff.
+        name = 'crouch'; spec = { anim: name, to: 0, hold: 1, pulse: 0.45 };
+      } else if (f.state === 'shield') {
+        // The derived shield row contains an attack and its energy burst.
+        name = 'idle'; spec = { anim: name, to: 0, hold: 1, pulse: 0.7 };
+      } else if (f.state === 'hitstun' || f.state === 'grabbed') {
+        // Do not play an attacking sequence while being hit or held.
+        name = 'land'; spec = { anim: name, to: 0, hold: 1 };
+      }
+    }
     // Tide and Vector use special lunge poses, not steps in their running
     // cycle. Use the continuous stride instead, including just after a turn.
     if (f.state === 'run' && (f.dashT | 0) > 0 && f.key !== 'tide' && f.key !== 'vector' && f.key !== 'briar' && f.key !== 'nomad') { name = 'dash'; spec = STATE_ANIM.dash; }
@@ -798,6 +816,13 @@ const Sprites = (() => {
         // slash during startup, and hold it precisely while the hitbox is live.
         i = attackIndex(f, frames, { k: authored.strike, wind: authored.wind });
       }
+      if (f.key === 'vesper' && name === 'nspecial' && act && act.finishAt !== undefined) {
+        // The long effect belongs to the final hit, not post-hit recovery.
+        const t = f.actionT | 0, start = act.startup, finish = start + act.finishAt;
+        i = t < start ? Math.min(1, Math.floor(t * 2 / Math.max(1, start))) :
+          t < start + act.rehit ? 2 : t < finish ? 3 + (t - start - act.rehit >= 3 ? 1 : 0) :
+          t < start + act.active ? 5 : 6;
+      }
       if (f.key === 'tide' && name === 'uspecial' && act) {
         // Anticipation, gathering, takeoff and the flight each own a pose;
         // never advance into the jump before the water has completed its loop.
@@ -808,7 +833,7 @@ const Sprites = (() => {
       if (f.key === 'nomad' && name === 'uspecial' && act && act.vinePull)
         i = clamp(Math.floor(act.vinePull.t * n / act.vinePull.duration), 0, n-1);
       if (f.charging) wob = Math.sin((f.chargeT | 0) * 0.42);       // the windup shakes
-      swing = act && (act.spinAxe || ((f.key === 'tide' || f.key === 'nomad') && name === 'uspecial')) ? null : attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
+      swing = act && (act.spinAxe || (f.key === 'vesper' && name === 'nspecial') || ((f.key === 'tide' || f.key === 'nomad') && name === 'uspecial')) ? null : attackSwing(f, frames.length >= 3 ? 0.34 : frames.length === 2 ? 0.72 : 1);
     } else {
       i = rowIndex(c, spec, frames, f.actionT | 0, (act && act.dur) || 1);
       if (spec.pulse) wob = Math.sin(c.t * 0.085) * spec.pulse;
@@ -1653,9 +1678,9 @@ const Sprites = (() => {
 
     const vi = (f.palIdx || 0) % VARIANTS.length;
     const src = vi === 0 ? at.img : tinted(at, vi);
-    // Marrow, Tide and Vector reuse forward-facing sweep art for back air; mirror it
+    // These fighters reuse forward-facing sweep art for back air; mirror it
     // so the live strike reads on the same side as the hitbox.
-    const backAir = (f.key === 'marrow' || f.key === 'tide' || f.key === 'vector' || f.key === 'briar' || f.key === 'nomad') && f.state === 'attack' && f.action && f.action.key === 'bair';
+    const backAir = (f.key === 'vesper' || f.key === 'marrow' || f.key === 'tide' || f.key === 'vector' || f.key === 'briar' || f.key === 'nomad') && f.state === 'attack' && f.action && f.action.key === 'bair';
     const dir = f.facing * (def.artFacing === undefined ? 1 : def.artFacing) * (backAir ? -1 : 1);
 
     const tideRise = f.key === 'tide' && f.state === 'special' && f.action && f.action.specialKey === 'u';

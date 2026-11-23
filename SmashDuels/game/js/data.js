@@ -195,7 +195,9 @@ const FIGHTERS = {
       dair: mv({ name: 'Kunai Spike', frames: 32, startup: 6, active: 4, damage: 10, bkb: 14, kbs: 50, angle: 265, hitboxes: [hb(-22, -16, 46, 56)], spike: 1 }),
     },
     specials: {
-      neutral: { name: 'VIPER FLURRY', desc: 'Three rapid blade strikes ending in a launcher', type: 'flurry', frames: 40, startup: 4, active: 13, damage: 2, bkb: 2, kbs: 2, angle: 70, multi: 2, rehit: 5, finish: { damage: 5, bkb: 16, kbs: 44, angle: 78 }, hitboxes: [hb(4, -78, 67, 64)] },
+      // The last strike paints a long energy blade. Its box is live only with
+      // that frame; earlier flurry hits keep a shorter, close-range reach.
+      neutral: { name: 'VIPER FLURRY', desc: 'Three rapid blade strikes ending in a launcher', type: 'flurry', frames: 40, startup: 4, active: 13, damage: 2, bkb: 2, kbs: 2, angle: 70, multi: 2, rehit: 5, finishAt: 10, finish: { damage: 5, bkb: 16, kbs: 44, angle: 78 }, hitboxes: [hb(4, -78, 109, 64, 0, 9), hb(4, -94, 394, 87, 10, 12)] },
       side: { name: 'SHADOWSTEP DASH', desc: 'Blink through foes', type: 'teleport', frames: 40, startup: 6, damage: 9, bkb: 20, kbs: 48, angle: 40, dist: 190 },
       up: { name: 'VIPER ASCENDANT', desc: 'Rising kick', type: 'recover', frames: 38, startup: 3, damage: 8, bkb: 16, kbs: 44, angle: 82, rise: 9.4, drift: 4.6 },
       down: { name: 'SMOKE COUNTER', desc: 'Counter + smoke', type: 'counter', frames: 38, startup: 1, window: 18, mult: 1.25 },
@@ -239,7 +241,7 @@ const FIGHTERS = {
       dair: mv({ name: 'Falling Fist', frames: 38, startup: 8, active: 5, damage: 11, bkb: 16, kbs: 54, angle: 264, hitboxes: [hb(-24, -16, 52, 60)], spike: 1 }),
     },
     specials: {
-      neutral: { name: 'RIFT FIST COMBO', desc: 'A rapid punch combination with a heavy finish', type: 'punchcombo', frames: 44, startup: 5, active: 13, damage: 3, bkb: 2, kbs: 2, angle: 70, multi: 2, rehit: 5, finish: { damage: 6, bkb: 20, kbs: 50, angle: 48 }, hitboxes: [hb(6, -76, 70, 60)] },
+      neutral: { name: 'RIFT FIST COMBO', desc: 'A rapid punch combination with a heavy finish', type: 'punchcombo', frames: 44, startup: 5, active: 13, damage: 3, bkb: 2, kbs: 2, angle: 70, multi: 2, rehit: 5, finish: { damage: 6, bkb: 20, kbs: 50, angle: 48 }, hitboxes: [hb(6, -76, 110, 60)] },
       side: { name: 'RIFT RISING', desc: 'An advancing rising strike that launches foes', type: 'risingdash', frames: 44, startup: 5, active: 12, damage: 11, bkb: 22, kbs: 55, angle: 82, dist: 115, hitboxes: [hb(4, -92, 70, 80)] },
       up: { name: 'DRONE GRAPPLE', desc: 'Drone-assisted rising boost', type: 'recover', frames: 44, startup: 5, damage: 6, bkb: 12, kbs: 34, angle: 84, rise: 8.6, drift: 5.4 },
       down: { name: 'RUNE MINE', desc: 'Placed proximity trap', type: 'mine', frames: 40, startup: 12, damage: 11, bkb: 20, kbs: 52, angle: 60, cooldown: 44 },

@@ -5,6 +5,12 @@
 
 const FRAME = 1; // logic frame unit
 
+// Slow the entire jump arc without materially changing its height: height is
+// proportional to velocity squared / gravity, while airtime grows by ~11%.
+const JUMP_SPEED_SCALE = 0.9;
+const GRAVITY_SCALE = 0.81;
+const FALL_SPEED_SCALE = 0.9;
+
 /* Maximum turn animation window while momentum changes direction. */
 const SKID_FRAMES = 11;
 const DASH_KICK = 0.28;               // fraction of run speed added on a fresh tap
@@ -489,7 +495,7 @@ class Fighter {
     const st = this.def.stats;
     if (this.onGround) {
       this.consume('jump');
-      this.vy = -st.jumpV * this.jumpMul();
+      this.vy = -st.jumpV * JUMP_SPEED_SCALE * this.jumpMul();
       // A held jump on an active stadium pad is boosted; a short tap is not.
       const pad=match.stage.springPads && match.rules.hazards && match.frame%600<300 &&
         (this.onPlatform === match.stage.platforms[0] || (!this.onPlatform && Math.abs(this.x)>match.stage.ground.w/2-140));
@@ -508,7 +514,7 @@ class Fighter {
       this.consume('jump');
       this.airJumpsLeft--;
       this.jumpsLeft = this.airJumpsLeft;
-      this.vy = -st.djumpV * this.jumpMul();
+      this.vy = -st.djumpV * JUMP_SPEED_SCALE * this.jumpMul();
       this.vx += this.horiz() * 1.2;
       this.fastfalled = false;
       this.jumpHoldT = 0; this.jumpCut = true;
@@ -529,7 +535,7 @@ class Fighter {
       }
     }
     const gScale = this.buffs.metal > 0 ? 1.9 : 1;
-    let maxFall = (this.fastfalled ? st.fastfall : st.fall) * (this.buffs.bunny > 0 ? 0.85 : 1) * gScale;
+    let maxFall = (this.fastfalled ? st.fastfall : st.fall) * FALL_SPEED_SCALE * (this.buffs.bunny > 0 ? 0.85 : 1) * gScale;
     if (this.state === 'helpless') maxFall *= 1.15;
     // Releasing jump early produces a short hop by easing the ascent down,
     // rather than instantly deleting nearly half of the upward velocity.
@@ -538,7 +544,7 @@ class Fighter {
       this.jumpHoldT = 0;
     }
     if (this.jumpHoldT > 0) this.jumpHoldT--;
-    let grav = st.gravity * gScale * (this.vy > 0 ? 1.05 : 1);
+    let grav = st.gravity * GRAVITY_SCALE * gScale * (this.vy > 0 ? 1.05 : 1);
     if (!this.jumpCut && this.vy < 0 && this.state === 'jump' && this.hitstun <= 0) grav *= 2.2;
     this.vy = Math.min(this.vy + grav, maxFall);
     if (this.hitstun <= 0 && this.state !== 'launch') this.vx *= 0.995;
@@ -850,7 +856,8 @@ class Fighter {
         b.w += 16;
       }
     }
-    if (!this.onGround) this.vy = Math.min(this.vy, 0) * 0.4; // slight float
+    // Aerial attacks must not erase the jump's momentum (or freeze a fall).
+    // Physics continues normally while the action animation plays.
     AUDIO.sfx('swing');
     match.fx.swoosh(this, (m.reach || 40) * 1.15);
     // small forward lunge for ground attacks
@@ -1678,7 +1685,10 @@ class Fighter {
         const spent = (this.hitCount && this.hitCount.get(target.id)) || 0;
         if (spent >= cap) continue;
         if (this.hitCount) this.hitCount.set(target.id, spent + 1);
-        const hit = a.finish && spent === (a.multi || 0) ? a.finish : a;
+        // A timed finisher also finishes targets first reached by its longer
+        // final strike; ordinary combos still finish on their last landed hit.
+        const finishNow = a.finishAt !== undefined && this.actionT - a.startup >= a.finishAt;
+        const hit = a.finish && (spent === (a.multi || 0) || finishNow) ? a.finish : a;
         // shield?
         if (target.shieldHP > 0 && !a.grab) {
           this.hitIds.set(target.id, this.actionT);
@@ -1818,7 +1828,7 @@ class Fighter {
       this.x = edgeX + side * 20;
       this.y = gd.y - 4; this.onGround = false;
       this.vx = -side * this.def.stats.air * .7;
-      this.vy = -this.def.stats.jumpV * this.jumpMul();
+      this.vy = -this.def.stats.jumpV * JUMP_SPEED_SCALE * this.jumpMul();
       this.jumpHoldT = 8; this.jumpCut = true; this.state = 'jump'; this.animT = 0;
       this.consume('jump'); AUDIO.sfx('jump');
     } else {

@@ -207,6 +207,73 @@ test('movement: holding a direction on a soft platform after landing resumes run
     `failed to resume running on platform: ${f.state}, vx=${f.vx}`);
 });
 
+test('movement: jumps are slower and floatier without losing their height', () => {
+  const { g } = run();
+  for (const key of Object.keys(g.FIGHTERS)) {
+    // Undo the new global scales on a private definition to measure the old arc
+    // through the same real simulation, rather than duplicating its equations.
+    const measure = (old) => {
+      const { ctx } = run();
+      const m = newMatch(ctx, cast(1, [key]), 'terminal');
+      m.rules.items = 'none'; m.rules.hazards = false; m.stage.platforms = [];
+      const f = m.fighters[0];
+      if (old) {
+        const st = { ...f.def.stats };
+        st.jumpV /= 0.9; st.djumpV /= 0.9;
+        st.gravity /= 0.81; st.fall /= 0.9; st.fastfall /= 0.9;
+        f.def = { ...f.def, stats: st };
+      }
+      f.x = 0; f.y = m.stage.ground.y; f.onGround = true; f.state = 'idle';
+      let height = 0, frames = 0, initialVy;
+      const ctl = control(m, () => ({ jump: true }));
+      while (frames < 150) {
+        ctl.tick(1); frames++;
+        if (frames === 1) initialVy = f.vy;
+        height = Math.max(height, m.stage.ground.y - f.y);
+        if (frames > 2 && f.onGround) break;
+      }
+      assert(f.onGround, `${key} failed to land`);
+      return { height, frames, initialVy };
+    };
+    const before = measure(true), after = measure(false);
+    assert(after.initialVy > before.initialVy, `${key} jump takeoff was not slowed`);
+    assert(after.frames >= before.frames * 1.07, `${key} airtime did not increase: ${before.frames} -> ${after.frames}`);
+    assert(after.height > before.height * 0.95 && after.height < before.height * 1.05,
+      `${key} jump height changed too much: ${before.height} -> ${after.height}`);
+
+    const { ctx } = run();
+    const m = newMatch(ctx, cast(1, [key]), 'terminal');
+    m.rules.items = 'none'; m.stage.platforms = [];
+    const f = m.fighters[0];
+    f.x = 0; f.y = m.stage.ground.y; f.onGround = true; f.state = 'idle';
+    let jump = true;
+    const ctl = control(m, () => ({ jump }));
+    ctl.tick(2); jump = false; ctl.tick(1); jump = true; ctl.tick(1);
+    const expected = -f.def.stats.djumpV * 0.9 + f.def.stats.gravity * 0.81;
+    assert(Math.abs(f.vy - expected) < 0.001, `${key} double jump did not use slower arc: ${f.vy} vs ${expected}`);
+  }
+});
+
+test('vesper: aerial attacks preserve jump and falling momentum', () => {
+  for (const [kind, dirs] of [['nair', {}], ['fair', {right:true}], ['bair', {left:true}], ['uair', {up:true}], ['dair', {down:true}]]) {
+    const {ctx} = run(), m = newMatch(ctx, cast(1, ['vesper']), 'terminal');
+    m.rules.items = 'none'; m.stage.platforms = [];
+    const f = m.fighters[0]; f.x = 0; f.y = m.stage.ground.y; f.onGround = true; f.state = 'idle';
+    let raw = {jump:true}; const ctl = control(m, () => raw); ctl.tick(4);
+    const before = f.vy; raw = {jump:true, attack:true, ...dirs}; ctl.tick(1);
+    assert(f.action && f.action.key === kind, `expected ${kind}, got ${f.action && f.action.key}`);
+    assert(Math.abs(f.vy - (before + f.def.stats.gravity * 0.81)) < 0.001,
+      `${kind} cut upward speed ${before} -> ${f.vy}`);
+    const startY = f.y; ctl.tick(8);
+    assert(startY - f.y > 35, `${kind} stopped jump ascent`);
+  }
+  const {ctx} = run(), m = newMatch(ctx, cast(1, ['vesper']), 'terminal');
+  m.rules.items = 'none'; m.stage.platforms = [];
+  const f = m.fighters[0]; f.x=0; f.y=-300; f.vy=5; f.onGround=false; f.state='fall';
+  control(m, () => ({attack:true})).tick(1);
+  assert(f.action && f.action.key === 'nair' && f.vy > 5, 'aerial attack froze a fall');
+});
+
 test('movement: tapping jump eases ascent and gives a lower hop than holding', () => {
   for (const key of ['valor', 'grim', 'astra', 'vesper', 'rook']) {
     const measure = (hold) => {
@@ -1618,6 +1685,44 @@ test('signature specials: all five neutral G moves are distinct, hit, and end', 
   }
 });
 
+test('signature specials: Rook and Vesper neutral G reach farther in both directions', () => {
+  for (const key of ['rook', 'vesper']) for (const dir of [-1, 1]) {
+    const hitAt = (distance, defense) => {
+      const {m,a,b,ctl,set} = itemFixture([key,'grim']);
+      a.facing = dir; b.x = dir * distance; b.y = a.y;
+      if (defense === 'shield') { b.shieldHP = 60; b.state = 'shield'; }
+      if (defense === 'team') { m.rules.teams = true; a.team = b.team = 1; }
+      if (defense === 'invincible') b.invincT = 150;
+      if (defense === 'shield') ctl.tick = ((tick) => (n) => {
+        // Keep the defending fighter's shield raised while driving real P1 input.
+        const read = m.readPlayerInput; m.readPlayerInput = f => f === b ? {shield:true} : read(f);
+        try { tick(n); } finally { m.readPlayerInput = read; }
+      })(ctl.tick.bind(ctl));
+      const hits = [], old = m.hitFighter.bind(m);
+      m.hitFighter = (attacker, target, data) => {
+        if (attacker === a && target === b) hits.push({ ...data, t: a.actionT });
+        return old(attacker, target, data);
+      };
+      set({special:true}); ctl.tick(1); set({}); ctl.tick(80);
+      return {hits, damage:b.damage, shield:b.shieldHP, state:a.state};
+    };
+    const range = key === 'rook' ? 130 : 380;
+    const result = hitAt(range);
+    assert(result.damage > 0, `${key} missed at increased range facing ${dir}`);
+    assert(result.state !== 'special', `${key} did not finish`);
+    if (key === 'vesper') {
+      assert(result.hits.length === 1 && result.hits[0].t >= 14 && result.hits[0].bkb === 16,
+        `far Vesper target must take only the visible finisher: ${JSON.stringify(result.hits)}`);
+    }
+    assert(hitAt(key === 'rook' ? 175 : 440).damage === 0, `${key} hit beyond its range`);
+    assert(hitAt(-range).damage === 0, `${key} hit behind itself`);
+    assert(hitAt(range, 'team').damage === 0, `${key} hit a teammate at range`);
+    assert(hitAt(range, 'invincible').damage === 0, `${key} hit an invincible target at range`);
+    const blocked = hitAt(range, 'shield');
+    assert(blocked.hits.length === 0 && blocked.damage > 0 && blocked.shield < 50, `${key} bypassed shield at range: ${JSON.stringify(blocked)}`);
+  }
+});
+
 test('signature specials: Rook side G follows input direction and rises into a launch', () => {
   for (const dir of [-1,1]) {
     const {m,a,b,ctl,set} = itemFixture(['rook','grim']);
@@ -1921,6 +2026,9 @@ test('marrow: the projectile never heals a KOed or respawning owner', () => {
 test('marrow: Grave Ascent gains 30 percent peak height over original', () => {
   function height(rise,grounded) {
     const {ctx}=run(), m=newMatch(ctx,cast(1,['marrow']),'skyshrine',{rules:{items:'none'}}), f=m.fighters[0];
+    // Compare the original move tuning under its original gravity so this
+    // historical regression is independent of global movement-feel changes.
+    f.def = { ...f.def, stats: { ...f.def.stats, gravity: f.def.stats.gravity / 0.81 } };
     if(rise!==null) f.def.specials.up.rise=rise;
     f.x=0;f.y=grounded?m.stage.ground.y:-300;f.onGround=grounded;f.state=grounded?'idle':'fall';f.spawnProtect=f.invincT=f.respawnT=0;f.vx=f.vy=0;
     const ctl=control(m);const y=f.y;let peak=y;f.__raw={up:true,special:true};ctl.tick(1);f.__raw={};
