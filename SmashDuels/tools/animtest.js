@@ -828,7 +828,8 @@ test('movement: every state resolves to a row that exists and plays', async () =
       const seen = new Set();
       for (let i = 0; i < row.length * (spec.step || 6) + 10; i++) { f.animT++; seen.add(S.pickAnim(f, 0).i); }
       if (seen.size < 2) bad.push(`${key}.${st}: played a ${row.length}-frame row and showed ${[...seen]}`);
-      const last = Math.round((spec.to === undefined ? 1 : spec.to) * (row.length - 1));
+      // Vesper's last jump cell is a crouch, excluded from the airborne sequence.
+      const last = key === 'vesper' && st === 'jump' ? 5 : Math.round((spec.to === undefined ? 1 : spec.to) * (row.length - 1));
       if (spec.once && !seen.has(last)) bad.push(`${key}.${st}: never reached its final frame ${last}`);
     }
   }

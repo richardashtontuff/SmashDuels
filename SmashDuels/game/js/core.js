@@ -12,7 +12,7 @@
    tools/atlascheck.js fails the build if index.html or the asset loader drifts from it,
    and the preview is served by tools/serve.py, which sends no-cache headers for the same reason,
    and `UI.diag().build` / the console banner say which build is actually running. */
-const BUILD = 'K66';
+const BUILD = 'K69';
 
 /* ---------- math / utils ---------- */
 const TAU = Math.PI * 2;

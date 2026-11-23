@@ -174,7 +174,10 @@ test('renderer: every state and move resolves to its own animation', () => {
       for (const st of states) {
         f.state = st; f.action = null; f.actionT = 0; f.shieldHP = 0; f.stunT = 0;
         f.onGround = true; f.facing = 1; f.hitstun = 0;
-        const want = S.STATE_ANIM[st] && S.STATE_ANIM[st].anim;
+        // Vesper's source sheet has grounded frames in its fall row and
+        // attack art in its defensive rows; use the curated alternatives.
+        const vesperRows = {fall:'jump', fastfall:'jump', helpless:'jump', launch:'jump', shield:'idle', hitstun:'land', grabbed:'land'};
+        const want = (f.key === 'vesper' && vesperRows[st]) || (S.STATE_ANIM[st] && S.STATE_ANIM[st].anim);
         const got = S.pickAnim(f, 1000);
         if (!got) { bad.push(`${f.key}/${st}: no frame`); continue; }
         const okName = want && (got.name === want || (st === 'taunt' && /^taunt[123]$/.test(got.name)));
