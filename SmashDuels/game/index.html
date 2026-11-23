@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
 <title>RIFT RUMBLE — a platform fighter</title>
-<link rel="stylesheet" href="css/style.css?v=K61">
-<link rel="stylesheet" href="css/ui-refresh.css?v=K52">
-<link rel="stylesheet" href="css/ui-fx.css?v=K61">
-<link rel="stylesheet" href="css/fighter-profiles.css?v=K52">
-<link rel="stylesheet" href="css/online.css?v=4">
-<link rel="stylesheet" href="css/stage-info.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=K66">
+<link rel="stylesheet" href="css/ui-refresh.css?v=K66">
+<link rel="stylesheet" href="css/ui-fx.css?v=K66">
+<link rel="stylesheet" href="css/fighter-profiles.css?v=K66">
+<link rel="stylesheet" href="css/online.css?v=K66">
+<link rel="stylesheet" href="css/stage-info.css?v=K66">
 </head>
 <body>
 <div id="app">
@@ -22,12 +22,17 @@
     <div id="hud-timer"><small>ROUND</small><span>2:30</span></div>
     <button id="btn-pause" aria-label="Pause">❚❚</button>
     <div id="hud-slots"></div>
+    <section id="tutorial-panel" class="tutorial-panel" aria-label="Tutorial lesson" hidden>
+      <span id="tutorial-progress" class="tutorial-progress"></span><strong id="tutorial-title"></strong>
+      <p id="tutorial-hint"></p><p id="tutorial-touch-hint" class="tutorial-touch-hint"></p><p id="tutorial-character-note" class="tutorial-character-note"></p><div id="tutorial-feedback" role="status" aria-live="polite"></div>
+      <div class="tutorial-actions"><button type="button" id="tutorial-demo">▶ DEMO</button><button type="button" id="tutorial-ledge" hidden>↗ LEDGE PRACTICE</button><button type="button" id="tutorial-back" hidden>← BACK TO LESSONS</button><button type="button" id="tutorial-toggle-touch" aria-pressed="true">HIDE TOUCH</button><button type="button" id="tutorial-restart">↻ RESTART LESSONS</button></div>
+    </section>
     <div id="pause-overlay">
       <div class="pause-card">
         <div class="pause-kicker" id="pause-kicker">MATCH INTERRUPTED / TAKE YOUR TIME</div><h2 id="pause-title">PAUSED<span>.</span></h2>
         <button class="mbtn primary" id="btn-resume">RESUME<small>back to the fight</small></button>
         <button class="mbtn" id="btn-restart">RESTART<small>same fighters & rules</small></button>
-        <button class="mbtn" id="btn-pause-settings">SETTINGS<small>music & sound</small></button>
+        <button class="mbtn" id="btn-pause-settings">SETTINGS<small>audio & controls</small></button>
         <button class="mbtn" id="btn-quit">QUIT<small>return to title</small></button>
       </div>
     </div>
@@ -48,14 +53,14 @@
             <div class="mode-grid">
               <button class="mbtn modebtn" data-mode="classic"><span class="tile-no">02</span><strong>CLASSIC</strong><small>5-stage gauntlet</small></button>
               <button class="mbtn modebtn" data-mode="targets"><span class="tile-no">03</span><strong>TARGETS</strong><small>Break all 10</small></button>
-              <button class="mbtn modebtn" data-mode="homered"><span class="tile-no">04</span><strong>HOME-RUN</strong><small>Launch the bag</small></button>
+              <button class="mbtn modebtn" data-mode="tutorial"><span class="tile-no">04</span><strong>TUTORIAL</strong><small>Learn moves · practice</small></button>
               <button class="mbtn modebtn" data-mode="online"><span class="tile-no">05</span><strong>ONLINE</strong><small>1v1 queue · private rooms</small></button>
             </div>
           </div>
           <div class="mode-preview" aria-live="polite"><span class="mode-preview-index">01 / BATTLE</span><span class="mode-preview-copy">A CUSTOM BATTLE FOR UP TO FOUR FIGHTERS</span><span class="mode-preview-mark" aria-hidden="true">◆</span></div>
           <div class="home-utility"><button class="home-link" id="btn-records">RECORDS <span>↗</span></button><button class="home-link" id="btn-help">HOW TO PLAY <span>↗</span></button><button class="home-link" id="btn-settings">SETTINGS <span>↗</span></button></div>
         </div>
-        <div class="home-art" aria-hidden="true"><div class="home-art-label">TEN FIGHTERS <span> / ONE RIFT</span></div><div class="home-art-number">10</div><img class="home-fighter home-fighter-back" src="assets/portraits/vesper_base.png?v=K52" alt=""><img class="home-fighter home-fighter-front" src="assets/portraits/valor_base.png?v=K52" alt=""><div class="home-art-caption">EVERY FIGHT<br><strong>STARTS HERE.</strong></div></div>
+        <div class="home-art" aria-hidden="true"><div class="home-art-label">TEN FIGHTERS <span> / ONE RIFT</span></div><div class="home-art-number">10</div><img class="home-fighter home-fighter-back" src="assets/portraits/vesper_base.png?v=K66" alt=""><img class="home-fighter home-fighter-front" src="assets/portraits/valor_base.png?v=K66" alt=""><div class="home-art-caption">EVERY FIGHT<br><strong>STARTS HERE.</strong></div></div>
       </div>
       <div class="home-footer"><span>LOCAL BATTLE / 1–4 PLAYERS</span><span>KEYBOARD + GAMEPAD SUPPORTED</span></div>
     </div>
@@ -173,7 +178,13 @@
       <div class="setting-row"><div><strong>MUSIC</strong><small>Menu and match soundtrack</small></div><div class="seg" role="group" aria-label="Music"><button data-setting="music" data-value="on">ON</button><button data-setting="music" data-value="off">OFF</button></div></div>
       <div class="setting-row"><div><strong>SOUND EFFECTS</strong><small>Hits, movement and menu cues</small></div><div class="seg" role="group" aria-label="Sound effects"><button data-setting="sfx" data-value="on">ON</button><button data-setting="sfx" data-value="off">OFF</button></div></div>
       <div class="settings-note"><b>QUICK TIP</b><span>Press M at any time to mute or unmute all audio. Cloud save controls are in Records.</span></div>
-    </div></div>
+    </div><section class="key-settings" aria-labelledby="key-settings-title">
+      <div class="key-settings-head"><div><span>02 / KEYBOARD</span><h2 id="key-settings-title">YOUR CONTROLS.</h2><p>Choose a player and select an action, then press a key. Escape cancels.</p></div><button type="button" id="bindings-reset">RESET PLAYER</button></div>
+      <div id="binding-players" class="binding-players" role="group" aria-label="Choose player"></div>
+      <div id="binding-list" class="binding-list"></div>
+      <p id="binding-status" class="binding-status" role="status" aria-live="polite">Select an action to change its key.</p>
+      <p class="binding-note">Using a key already assigned to this player swaps the two actions. Other players may share keys; check for conflicts when playing together. Escape, Enter, Tab and M are reserved. Gamepad and touch controls are unchanged.</p>
+    </section></div>
   </section>
 
   <!-- ================= HOW TO PLAY ================= -->
@@ -188,7 +199,7 @@
       </div>
       <div class="hcard">
         <h3>PLAYER 1</h3>
-        <div class="klist">
+        <div class="klist" id="help-p1">
           <div class="krow"><span>Move</span><span><kbd>A</kbd><kbd>D</kbd></span></div>
           <div class="krow"><span>Jump / double jump</span><span><kbd>Space</kbd></span></div>
           <div class="krow"><span>Aim up</span><span><kbd>W</kbd></span></div>
@@ -202,7 +213,7 @@
       </div>
       <div class="hcard">
         <h3>PLAYER 2</h3>
-        <div class="klist">
+        <div class="klist" id="help-p2">
           <div class="krow"><span>Move / aim</span><span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd></span></div>
           <div class="krow"><span>Attack</span><span><kbd>Num 1</kbd></span></div>
           <div class="krow"><span>Special</span><span><kbd>Num 2</kbd></span></div>
@@ -220,13 +231,14 @@
       </div>
       <div class="hcard">
         <h3>FIGHTER SPECIALS</h3>
-        <p>Press <b>G</b> for a fighter's signature move, or hold left / right and press <b>G</b> for their side special. Running + <b>F</b> uses their dash attack. Up + G or jump + G remains your recovery; down + G uses a defensive move.</p>
-        <p><b>Valor</b> chains crescent cuts, launches with Skyslash Rush, and follows up a connecting Skyward Ascent with extra strikes. <b>Grim</b> strikes a wider area around him and charges like a boulder. <b>Astra</b> calls falling stars and leaves a comet trail. <b>Vesper</b> chains rapid blades and blinks through foes. <b>Rook</b> strings together punches and rises into a launching strike. <b>Marrow</b> holds G to charge Soul Reap (up to 2× damage after one second), then releases a spectral blast that heals on a clean hit. Up + G spins his axe in a rising circle.</p>
+        <p>Press <b>Special</b> for a fighter's signature move, or hold left / right and press <b>Special</b> for their side special. Running + <b>Attack</b> uses their dash attack. Up + Special or jump + Special is your recovery; down + Special uses a defensive move.</p>
+        <p>Keyboard bindings can be changed in Settings. Try the Tutorial for guided practice.</p>
+        <p><b>Valor</b> chains crescent cuts, launches with Skyslash Rush, and follows up a connecting Skyward Ascent with extra strikes. <b>Grim</b> strikes a wider area around him and charges like a boulder. <b>Astra</b> calls falling stars and leaves a comet trail. <b>Vesper</b> chains rapid blades and blinks through foes. <b>Rook</b> strings together punches and rises into a launching strike. <b>Marrow</b> holds Special to charge Soul Reap (up to 2× damage after one second), then releases a spectral blast that heals on a clean hit. Up + Special spins his axe in a rising circle.</p>
       </div>
       <div class="hcard">
         <h3>DEFENSE</h3>
         <p><b>Shield</b> blocks attacks but not grabs, and it shrinks as it takes hits. If it breaks, you're stunned.</p>
-        <p><b>Shield + direction</b> rolls. <b>Shield + down</b> spot-dodges. Shield in the air is an air dodge. Press shield as you land from a tumble to <b>tech</b>.</p>
+        <p><b>Shield + down</b> spot-dodges. Holding left or right while shielding keeps your shield up. Shield in the air is an air dodge. Press shield as you land from a tumble to <b>tech</b>.</p>
       </div>
       <div class="hcard">
         <h3>RECOVERY</h3>
@@ -316,18 +328,19 @@
     <p class="stage-info-note">Inspired by classic arenas; mechanics are adapted for Rift Rumble.</p>
   </section>
 </div>
-<script src="js/core.js?v=K59"></script>
-<script src="js/data.js?v=K62"></script>
-<script src="js/render.js?v=K63"></script>
-<script src="js/fighter.js?v=K62"></script>
-<script src="js/items.js?v=K60"></script>
-<script src="js/ai.js?v=K60"></script>
-<script src="js/match.js?v=K60"></script>
-<script src="js/modes.js?v=K58"></script>
-<script src="js/cloud.js?v=K52"></script>
-<script src="js/stage-info.js?v=1"></script>
-<script src="js/online-presentation.js?v=1"></script>
-<script src="js/online.js?v=10"></script>
-<script src="js/ui.js?v=K62"></script>
+<script src="js/core.js?v=K66"></script>
+<script src="js/data.js?v=K66"></script>
+<script src="js/render.js?v=K66"></script>
+<script src="js/fighter.js?v=K66"></script>
+<script src="js/items.js?v=K66"></script>
+<script src="js/ai.js?v=K66"></script>
+<script src="js/match.js?v=K66"></script>
+<script src="js/tutorial.js?v=K66"></script>
+<script src="js/modes.js?v=K66"></script>
+<script src="js/cloud.js?v=K66"></script>
+<script src="js/stage-info.js?v=K66"></script>
+<script src="js/online-presentation.js?v=K66"></script>
+<script src="js/online.js?v=K66"></script>
+<script src="js/ui.js?v=K66"></script>
 </body>
 </html>

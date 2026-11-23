@@ -4,9 +4,10 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const {boot, cast, GAME} = require('./harness');
+const {boot, cast, GAME, load} = require('./harness');
 
 const h = boot();
+load(h.ctx,['js/tutorial.js']);
 const nodes = {};
 let nextFrame;
 function node() {

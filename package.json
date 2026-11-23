@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node -e \"console.log('Game assets are already built; no compilation required.')\"",
     "start": "node SmashDuels/server/server.js",
+    "test:tutorial": "node SmashDuels/tools/tutorial-controls-test.js",
     "test:online": "node SmashDuels/tools/online-presentation-test.js && node SmashDuels/tools/online-test.js"
   },
   "dependencies": {

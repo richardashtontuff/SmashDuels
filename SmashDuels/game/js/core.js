@@ -12,7 +12,7 @@
    tools/atlascheck.js fails the build if index.html or the asset loader drifts from it,
    and the preview is served by tools/serve.py, which sends no-cache headers for the same reason,
    and `UI.diag().build` / the console banner say which build is actually running. */
-const BUILD = 'K52';
+const BUILD = 'K66';
 
 /* ---------- math / utils ---------- */
 const TAU = Math.PI * 2;
@@ -61,16 +61,42 @@ function srandom() { // mulberry32
 }
 
 /* ---------- input ---------- */
-const INPUT = {
-  keys: {}, pressed: {}, released: {},
-  map: {
+const DEFAULT_KEY_MAP = {
     p1: { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', attack: 'KeyF', special: 'KeyG', jump: 'Space', shield: 'KeyC', grab: 'KeyV' },
     p2: { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', attack: 'Numpad1', special: 'Numpad2', jump: 'Numpad3', shield: 'Numpad0', grab: 'Numpad4' },
     p3: { left: 'KeyJ', right: 'KeyL', up: 'KeyI', down: 'KeyK', attack: 'KeyU', special: 'KeyO', jump: 'KeyP', shield: 'KeyH', grab: 'KeyY' },
     p4: { left: 'Numpad4', right: 'Numpad6', up: 'Numpad8', down: 'Numpad5', attack: 'Numpad7', special: 'Numpad9', jump: 'Numpad0', shield: 'Numpad1', grab: 'Numpad2' },
+};
+const INPUT = {
+  keys: {}, pressed: {}, released: {}, touch: {}, touchPressed: {}, capture: null,
+  map: JSON.parse(JSON.stringify(DEFAULT_KEY_MAP)),
+  validCode(code) { return typeof code === 'string' && /^(Key[A-Z]|Digit[0-9]|Numpad[0-9]|NumpadAdd|NumpadSubtract|NumpadMultiply|NumpadDivide|NumpadDecimal|ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Space|ShiftLeft|ShiftRight|ControlLeft|ControlRight|AltLeft|AltRight|Backquote|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Comma|Period|Slash)$/.test(code) && code !== 'KeyM'; },
+  label(code) { return ({Space:'Space',ArrowLeft:'←',ArrowRight:'→',ArrowUp:'↑',ArrowDown:'↓',ShiftLeft:'Left Shift',ShiftRight:'Right Shift',ControlLeft:'Left Ctrl',ControlRight:'Right Ctrl',AltLeft:'Left Alt',AltRight:'Right Alt',Backquote:'`',Minus:'-',Equal:'=',BracketLeft:'[',BracketRight:']',Backslash:'\\',Semicolon:';',Quote:"'",Comma:',',Period:'.',Slash:'/'})[code] || code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'Num '); },
+  loadBindings(saved) {
+    for (const player of Object.keys(DEFAULT_KEY_MAP)) {
+      const defaults=DEFAULT_KEY_MAP[player], candidate=saved && saved[player];
+      const valid=candidate && Object.keys(defaults).every(k=>INPUT.validCode(candidate[k])) && new Set(Object.keys(defaults).map(k=>candidate[k])).size===Object.keys(defaults).length;
+      INPUT.map[player]=Object.fromEntries(Object.keys(defaults).map(k=>[k,valid ? candidate[k] : defaults[k]]));
+    }
+    INPUT.clear();
+  },
+  clear() { INPUT.keys={}; INPUT.pressed={}; INPUT.released={}; INPUT.touch={}; INPUT.touchPressed={}; },
+  bind(player, action, code) {
+    const map=INPUT.map[player];
+    if (!map || !Object.prototype.hasOwnProperty.call(map,action) || !INPUT.validCode(code)) return false;
+    const previous=map[action], other=Object.keys(map).find(k=>k!==action && map[k]===code);
+    if (other) map[other]=previous;
+    map[action]=code; INPUT.clear();
+    SAVE.data.settings.keyBindings=JSON.parse(JSON.stringify(INPUT.map)); SAVE.save(); return true;
+  },
+  resetBindings(player) {
+    if (!DEFAULT_KEY_MAP[player]) return;
+    INPUT.map[player]=Object.assign({},DEFAULT_KEY_MAP[player]); INPUT.clear();
+    SAVE.data.settings.keyBindings=JSON.parse(JSON.stringify(INPUT.map)); SAVE.save();
   },
   init() {
     addEventListener('keydown', e => {
+      if (INPUT.capture) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) INPUT.capture(e.code); return; }
       if (document.getElementById('stage-info-dialog') && !document.getElementById('stage-info-dialog').hidden) return;
       const editing = e.target && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
       if (editing) return;
@@ -83,11 +109,11 @@ const INPUT = {
       if (e.code === 'KeyM' && !e.repeat) AUDIO.toggleMute();
     });
     addEventListener('keyup', e => { INPUT.keys[e.code] = false; INPUT.released[e.code] = true; });
-    addEventListener('blur', () => { INPUT.keys = {}; });
+    addEventListener('blur', () => { INPUT.clear(); });
   },
   down(code) { return !!INPUT.keys[code]; },
   hit(code) { return !!INPUT.pressed[code]; },
-  endFrame() { INPUT.pressed = {}; INPUT.released = {}; },
+  endFrame() { INPUT.pressed = {}; INPUT.released = {}; INPUT.touchPressed = {}; },
 };
 
 /* gamepad support */
@@ -246,6 +272,7 @@ const SAVE = {
       };
     }
     SAVE.data.settings = Object.assign({ music: true, sfx: true }, SAVE.data.settings || {});
+    INPUT.loadBindings(SAVE.data.settings.keyBindings);
     if (!Array.isArray(SAVE.data.unlocked)) SAVE.data.unlocked = [];
     for (const k of FIGHTER_KEYS) if (!SAVE.data.unlocked.includes(k)) SAVE.data.unlocked.push(k);
     return SAVE.data;

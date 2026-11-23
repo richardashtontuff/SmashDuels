@@ -393,7 +393,7 @@ class Fighter {
       if (this.dashT > 0) this.dashT--;
 
       // A raised shield owns ground movement until it is released, jumped out
-      // of, or turned into a dodge by updateShield.
+      // of, or turned into a spot-dodge by updateShield.
       if (this.shieldHP > 0 && this.state === 'shield') {
         this.vx = approach(this.vx, 0, traction * 1.8);
         this.turnT = 0; this.endDash();
@@ -720,11 +720,6 @@ class Fighter {
   updateShield(match) {
     if (this.grabbedBy) return;
     if (this.input.shield && this.onGround && this.canAct() && this.shieldHP === 0 && this.shieldStun <= 0) {
-      // shorthop guard: shield + direction = roll
-      const h = this.horiz();
-      if (this.input.leftP || this.input.rightP) {
-        this.startRoll(h, match); return;
-      }
       if (this.input.downP) { this.startSpotDodge(match); return; }
       this.shieldHP = 60; this.shieldT = 0;
       this.state = 'shield';
@@ -735,9 +730,8 @@ class Fighter {
       // drain
       this.shieldHP -= 0.12 + (this.shieldT > 260 ? 0.4 : 0);
       if (this.input.shieldP && this.shieldT > 0) { }
-      // roll / dodge out of shield
-      if (this.input.leftP || this.input.rightP) this.startRoll(this.horiz(), match);
-      else if (this.input.downP) this.startSpotDodge(match);
+      // Shield stays raised while pressing left or right.
+      if (this.input.downP) this.startSpotDodge(match);
       else if (this.input.jumpP) { this.shieldHP = 0; this.tryJump(match); }
       else if (this.input.attackP) { this.shieldHP = 0; this.startGrab(match); }
       if (!this.input.shield) { this.shieldHP = 0; if (this.state === 'shield') this.state = 'idle'; }
