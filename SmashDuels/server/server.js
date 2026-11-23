@@ -14,17 +14,23 @@ const KEYS = ['left','right','up','down','attack','special','jump','shield','gra
 const fighterFields = ['x','y','vx','vy','state','stateT','animT','actionT','action','facing','damage','stocks','eliminated','stats','buffs','invincT','spawnProtect','respawnT','ledgeInvuln','ledge','hitlag','hitT','stunT','dashT','rollDir','groundDist','shakeX','shakeY','shieldHP','charging','chargeT','tauntIdx','hasSmashBall','finalActive','vineGrabbed','fastfalled','onGround'];
 const itemFields = ['type','x','y','vx','vy','rot','life','spawnT','onGround','dead','stageFruit','bobT','cooldown'];
 const projectileFields = ['x','y','vx','vy','damage','bkb','kbs','angle','life','color','size','kind','t','rot','fadeFrames','chargePower','dead'];
+// Stable render identities prevent unrelated entities from being blended after removal.
+const renderIds = new WeakMap();
+let nextRenderId = 1;
+function renderId(o) { if (!renderIds.has(o)) renderIds.set(o, nextRenderId++); return renderIds.get(o); }
+const renderCopy = (o, keys) => ({...copyFields(o, keys), netId:renderId(o)});
+const fxCopy = arr => arr.map(o => ({...o, netId:renderId(o)}));
 const copyFields = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k,o[k]]));
 function snapshot(m) {
   return {frame:m.frame,time:m.time,state:m.state,stateT:m.stateT,overT:m.overT,announcement:m.announcement,
     fighters:m.fighters.map(f=>({...copyFields(f,fighterFields),grabbing:f.grabbing ? f.grabbing.id : null})),
-    projectiles:m.projectiles.map(p=>copyFields(p,projectileFields)),
-    items:m.items.filter(it=>it.stageFruit && !it.dead).map(it=>copyFields(it,itemFields)),
-    mines:m.mines.map(p=>copyFields(p,['x','y','t','life','dead'])),
-    summons:m.summons.map(p=>copyFields(p,['x','y','t','life','kind','facing','dead'])),
+    projectiles:m.projectiles.map(p=>renderCopy(p,projectileFields)),
+    items:m.items.filter(it=>it.stageFruit && !it.dead).map(it=>renderCopy(it,itemFields)),
+    mines:m.mines.map(p=>renderCopy(p,['x','y','t','life','dead'])),
+    summons:m.summons.map(p=>renderCopy(p,['x','y','t','life','kind','facing','dead'])),
     stageForm:m.stage.form,stageMechanic:m.stage.mechanic,stageHazard:m.stage.hazard,
     platforms:m.stage.platforms.map(p=>({x:p.x,y:p.y,cx:p.cx,cy:p.cy,dx:p.dx,dy:p.dy,active:p.active,warning:p.warning})),
-    fx:{parts:m.fx.parts, texts:m.fx.texts, rings:m.fx.rings, arcs:m.fx.arcs, lines:m.fx.lines},
+    fx:{parts:fxCopy(m.fx.parts), texts:fxCopy(m.fx.texts), rings:fxCopy(m.fx.rings), arcs:fxCopy(m.fx.arcs), lines:fxCopy(m.fx.lines)},
     winner:m.winner ? m.winner.map(f=>f.id) : null};
 }
 function createServer(options={}) {

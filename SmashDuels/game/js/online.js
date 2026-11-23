@@ -2,6 +2,7 @@
    snapshots; it never advances combat or decides hits. */
 'use strict';
 const Online = (() => {
+  const presentation=OnlinePresentation.createBuffer();
   const keys=['left','right','up','down','attack','special','jump','shield','grab'];
   let socket=null, room=null, playing=false, ready=false, timer=null, lastMask=-1, noticeTimer=null;
   const el=id=>document.getElementById('online-'+id);
@@ -59,7 +60,7 @@ const Online = (() => {
   }
   function entry(){StageInfo.close();room=null;el('entry').hidden=false;el('room').hidden=true;document.querySelector('.online-shell').classList.remove('in-room');}
   function open(){setup();entry();status('Connect to play online.');UI.show('screen-online');}
-  function leave(){playing=false;room=null;lastMask=-1;if(timer){clearInterval(timer);timer=null;}if(socket){send({type:'leave'});const old=socket;socket=null;old.close();}}
+  function leave(){presentation.reset();playing=false;room=null;lastMask=-1;if(timer){clearInterval(timer);timer=null;}if(socket){send({type:'leave'});const old=socket;socket=null;old.close();}}
   function connect(first){
     if(socket)return;
     status('Connecting…');el('entry').hidden=true;el('room').hidden=false;document.querySelector('.online-shell').classList.add('in-room');el('room-info').textContent='CONNECTING…';el('players').replaceChildren();el('player-count').textContent='';el('fighter-section').hidden=el('stage-section').hidden=el('start').hidden=true;
@@ -67,24 +68,24 @@ const Online = (() => {
     const ws=new WebSocket(scheme+'//'+location.host+'/online');socket=ws;
     ws.onopen=()=>{if(socket===ws)send(first);};
     ws.onmessage=e=>{if(socket!==ws)return;let msg;try{msg=JSON.parse(e.data)}catch{return;}receive(msg);};
-    ws.onclose=()=>{if(socket!==ws)return;socket=null;if(playing){playing=false;Game.stopMatchView();UI.show('screen-online');}entry();status('Disconnected from the online server.');notice('Disconnected from the online server.');};
+    ws.onclose=()=>{if(socket!==ws)return;socket=null;presentation.reset();if(playing){playing=false;Game.stopMatchView();UI.show('screen-online');}entry();status('Disconnected from the online server.');notice('Disconnected from the online server.');};
     ws.onerror=()=>status('Could not connect to the online server.');
   }
   function receive(msg){
     if(msg.type==='waiting'){el('room-info').textContent='SEARCHING FOR A RIVAL…';status('Waiting for another player.');return;}
     if(msg.type==='error'){leave();entry();status(msg.message);notice(msg.message);return;}
     if(msg.type==='notice'){notice(msg.message);return;}
-    if(msg.type==='round_aborted'){playing=false;lastMask=-1;Game.stopMatchView();UI.show('screen-online');notice(msg.message);return;}
+    if(msg.type==='round_aborted'){presentation.reset();playing=false;lastMask=-1;Game.stopMatchView();UI.show('screen-online');notice(msg.message);return;}
     if(msg.type==='ended'){const wasPlaying=playing;leave();if(wasPlaying){Game.stopMatchView();UI.show('screen-online');}entry();status(msg.message);notice(msg.message);return;}
     if(msg.type==='room'){room=msg;renderRoom();return;}
     if(msg.type==='start'){
-      playing=true;lastMask=-1;Game.startMatch({rules:Object.assign({},DEFAULT_RULES,msg.rules),cast:msg.cast,stageKey:msg.stage});return;
+      presentation.reset();playing=true;lastMask=-1;Game.startMatch({rules:Object.assign({},DEFAULT_RULES,msg.rules),cast:msg.cast,stageKey:msg.stage});return;
     }
-    if(msg.type==='snapshot' && playing)apply(msg.data);
+    if(msg.type==='snapshot' && playing)presentation.push(msg.data);
   }
   function returnToRoom(){
     if(!playing || !room || room.mode!=='private' || !socket || socket.readyState!==WebSocket.OPEN)return;
-    send({type:'return_room'});playing=false;lastMask=-1;Game.stopMatchView();UI.show('screen-online');renderRoom();
+    send({type:'return_room'});presentation.reset();playing=false;lastMask=-1;Game.stopMatchView();UI.show('screen-online');renderRoom();
   }
   function playerBadge(index,text){const badge=document.createElement('span');badge.className='online-player-badge';badge.style.setProperty('--player-color',colors[index]);badge.textContent=text||'P'+(index+1);return badge;}
   function renderRoom(){
@@ -138,6 +139,10 @@ const Online = (() => {
     const input=blocked?{}:m.readPlayerInput(m.fighters[0]);let mask=0;keys.forEach((k,i)=>{if(input[k])mask|=1<<i;});
     if(mask!==lastMask){send({type:'input',mask});lastMask=mask;}
   }
+  function present(now){
+    const s=OnlinePresentation.interpolate(presentation.sample(now));
+    if(s)apply(s);
+  }
   function apply(s){
     const m=Game.getMatch();if(!m)return;
     for(const k of ['frame','time','state','stateT','overT','announcement'])m[k]=s[k];
@@ -153,5 +158,5 @@ const Online = (() => {
     Object.assign(m.fx,s.fx);
     if(s.winner)m.winner=s.winner.map(i=>m.fighters[i]);
   }
-  return {open,leave,tick,returnToRoom,get playing(){return playing;},get canReturn(){return playing && room && room.mode==='private';}};
+  return {open,leave,tick,present,returnToRoom,get playing(){return playing;},get canReturn(){return playing && room && room.mode==='private';}};
 })();

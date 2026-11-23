@@ -844,7 +844,7 @@ const Game = (() => {
     while (acc >= STEP && steps < 4) {
       if (match && !match.paused) {
         GAMEPADS.poll();
-        if (Online.playing) { Online.tick(match, onlineMenuOpen); match.cam.update(match.fighters); }
+        if (Online.playing) Online.tick(match, onlineMenuOpen);
         else match.update();
         INPUT.endFrame();
       }
@@ -857,6 +857,11 @@ const Game = (() => {
        exactly the tick the engine produced — no added input latency on a normal
        monitor. */
     const alpha = frameDt < STEP * 1.3 ? Math.min(1, acc / STEP) : 0;
+    if (match && Online.playing) {
+      Online.present(now);
+      // Follow the interpolated fighters at display rate, not at the 60 Hz input tick.
+      match.cam.update(match.fighters, Math.max(0, dt) / STEP);
+    }
     if (match) render(alpha);
     updateHUD();
   }
@@ -870,7 +875,11 @@ const Game = (() => {
     cam.W = W; cam.H = H;
     // render-rate smoothing; see Sprites.beginFrame (skipped while paused, where
     // a frozen fighter has velocity but no motion to interpolate)
-    const unblend = Sprites.beginFrame ? Sprites.beginFrame(match, match.paused ? 0 : (alpha || 0)) : null;
+    // Online positions already come from interpolation; never extrapolate them again.
+    // Also avoid overlapping animation cells, which read as ghost fighters online.
+    const online = Online.playing;
+    if (online) Sprites.setSmooth(false);
+    const unblend = Sprites.beginFrame ? Sprites.beginFrame(match, online || match.paused ? 0 : (alpha || 0)) : null;
 
     // background (screen space parallax)
     ctx.save();
@@ -1032,6 +1041,7 @@ const Game = (() => {
 
     ctx.restore();
     if (unblend) unblend();          // sim state is exactly what the last tick left it
+    if (online) Sprites.setSmooth(true);
 
     // screen-space overlays
     ctx.save();
