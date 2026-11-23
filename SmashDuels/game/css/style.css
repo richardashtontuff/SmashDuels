@@ -230,7 +230,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 
 /* ---------- touch controls ---------- */
 #touch-controls { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 6; }
-.touchbtn { position: absolute; pointer-events: auto; border-radius: 50%; background: rgba(20,28,40,.6); border: 1px solid rgba(120,160,210,.35);
+.touchbtn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; background: rgba(20,28,40,.6); border: 1px solid rgba(120,160,210,.35);
   color: #cfe0f5; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; letter-spacing: .06em; }
 .touchbtn.down { background: rgba(90,169,255,.4); border-color: #9fd4ff; }
 .touchbtn[data-touch=left] { left: 18px; bottom: 120px; width: 54px; height: 54px; }
@@ -242,7 +242,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 .touchbtn[data-touch=jump] { right: 104px; bottom: 152px; width: 56px; height: 56px; }
 .touchbtn[data-touch=shield] { right: 30px; bottom: 52px; width: 52px; height: 52px; }
 .touchbtn[data-touch=grab] { right: 172px; bottom: 44px; width: 46px; height: 46px; font-size: 9px; }
-@media (hover: none) and (pointer: coarse) { #touch-controls { display: block; } }
+@media (any-pointer: coarse) { #touch-controls { display: block; } }
 
 /* ---------- scrollbars ---------- */
 ::-webkit-scrollbar { width: 8px; height: 8px; }

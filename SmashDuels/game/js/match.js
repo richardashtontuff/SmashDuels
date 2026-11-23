@@ -453,7 +453,7 @@ class Match {
       if (f.eliminated) continue;
       if (this.state !== 'play') break;
       if (f.isCPU && !f.ai) f.ai = new CPU(f, this);
-      const raw = f.isCPU && f.ai ? f.ai.think(this) : this.readPlayerInput(f);
+      const raw = this.tutorial && f.id === 1 ? this.tutorial.demoInput() : f.isCPU && f.ai ? f.ai.think(this) : this.readPlayerInput(f);
       f.readInput(raw);
       f.update(this);
     }
@@ -488,6 +488,7 @@ class Match {
 
     this.fx.update();
     this.cam.update(this.fighters);
+    if (this.tutorial) this.tutorial.update();
     this.checkEnd();
   }
 
@@ -500,6 +501,7 @@ class Match {
       jump: INPUT.hit(map.jump) || INPUT.down(map.jump), shield: INPUT.down(map.shield) || INPUT.hit(map.shield),
       grab: INPUT.hit(map.grab) || INPUT.down(map.grab),
     };
+    if (f.playerIndex === 0) for (const key of Object.keys(r)) r[key] = r[key] || !!INPUT.touch[key] || !!INPUT.touchPressed[key];
     if (gp) {
       r.left = r.left || gp.left; r.right = r.right || gp.right; r.up = r.up || gp.up; r.down = r.down || gp.down;
       r.attack = r.attack || gp.attack; r.special = r.special || gp.special;
@@ -1128,6 +1130,7 @@ class Match {
     AUDIO.sfx(isStar ? 'starKO' : 'ko');
     if (f.stocks - 1 > 0) this.announce('KO!', '#ff5a7a', 45);
     f.die(this, killer);
+    if (this.tutorial) { f.stocks=this.rules.stocks; f.eliminated=false; f.respawnT=10; return; }
     if (f.stocks <= 0) {
       this.announce(f.def.name + ' ELIMINATED!', '#ff5a7a', 80);
       this.fx.text(f.x, f.y - 140, 'GAME OVER', f.pal.accent, 30);
@@ -1136,6 +1139,7 @@ class Match {
   }
 
   checkEnd() {
+    if (this.tutorial) return;
     const alive = this.fighters.filter(f => f.stocks > 0);
     if (this.rules.teams) {
       const teamsAlive = new Set(alive.map(f => f.team));
@@ -1183,7 +1187,7 @@ class Match {
   }
 
   triggerChallenge(kind, f) {
-    if (!f || f.isCPU) return;
+    if (this.tutorial || !f || f.isCPU) return;
     const S = SAVE.data;
     if (kind === 'win' && !S.challengesDone.includes('first_win')) {
       SAVE.challengeDone('first_win'); S.coins += 100; SAVE.save();

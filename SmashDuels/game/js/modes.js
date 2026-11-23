@@ -9,6 +9,15 @@ const Modes = (() => {
 
   const CLASSIC_ORDER = ['grim', 'vesper', 'astra', 'rook', 'valor', 'marrow', 'tide', 'vector', 'briar', 'nomad'];
 
+  function startTutorial(fighterKey, palIdx) {
+    current = {kind:'tutorial', fighterKey, palIdx};
+    const rules=Object.assign({}, DEFAULT_RULES, {mode:'stock', stocks:3, items:'none', hazards:false, teams:false});
+    Game.startMatch({rules, cast:[
+      {key:fighterKey, palIdx, isCPU:false, team:0, label:'P1'},
+      {key:fighterKey, palIdx:(palIdx+1)%FIGHTERS[fighterKey].palettes.length, isCPU:true, team:1, label:'DUMMY'},
+    ], stageKey:'battlefield', metaMode:'tutorial'});
+  }
+
   /* ---------------- Classic Mode ---------------- */
   function startClassic(fighterKey, palIdx, level) {
     current = {
@@ -284,7 +293,7 @@ const Modes = (() => {
   return {
     get current() { return current; },
     startClassic, launchClassicStage, reportMatchEnd,
-    startTargets, startHomeRun, homeRunSwing, homeRunLaunch, homeRunEnd,
+    startTargets, startTutorial, startHomeRun, homeRunSwing, homeRunLaunch, homeRunEnd,
     startMultiMan, spawnMob,
     reset() { current = null; },
   };

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node server/server.js",
+    "test:tutorial": "node tools/tutorial-controls-test.js",
     "test:online": "node tools/online-presentation-test.js && node tools/online-test.js",
     "build": "node -e \"console.log('Game assets are already built; no compilation required.')\""
   },

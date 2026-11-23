@@ -24,6 +24,8 @@ const UI = (() => {
   let vsCPULevel = 5;
   let modeTarget = 'vs';
   let settingsReturn = 'screen-title';
+  let bindingPlayer = 'p1', bindingAction = null;
+  const BINDING_LABELS = {left:'Move left',right:'Move right',up:'Up',down:'Down',attack:'Attack',special:'Special',jump:'Jump',shield:'Shield',grab:'Grab / item'};
   let lastHeroKey = null;
   const PLAYER_COLORS = ['#ef3c43', '#2688e9', '#edb72c', '#35a669'];
   let toastEl = null;
@@ -132,7 +134,7 @@ const UI = (() => {
     vs:      { index: '01 / BATTLE', title: 'VS MODE', copy: 'A CUSTOM BATTLE FOR UP TO FOUR FIGHTERS', front: 'valor', back: 'vesper', lead: 'YOUR RULES.', end: 'YOUR RIFT.' },
     classic: { index: '02 / CLASSIC', title: 'CLASSIC', copy: 'TAKE ON A FIVE-STAGE GAUNTLET', front: 'marrow', back: 'grim', lead: 'FIVE STAGES.', end: 'ONE CHAMPION.' },
     targets: { index: '03 / TARGETS', title: 'TARGETS', copy: 'BREAK ALL TEN TARGETS AGAINST THE CLOCK', front: 'astra', back: 'vector', lead: 'TEN TARGETS.', end: 'GO FOR SPEED.' },
-    homered: { index: '04 / HOME-RUN', title: 'HOME-RUN', copy: 'POWER UP AND SEND THE BAG FLYING', front: 'rook', back: 'tide', lead: 'WIND IT UP.', end: 'SEND IT FLYING.' },
+    tutorial: { index: '04 / TUTORIAL', title: 'TUTORIAL', copy: 'LEARN YOUR MOVES WITH A PRACTICE DUMMY', front: 'rook', back: 'tide', lead: 'LEARN THE MOVES.', end: 'OWN THE RIFT.' },
     online: { index: '05 / ONLINE', title: 'ONLINE', copy: 'FIND A RIVAL OR PLAY WITH FRIENDS', front: 'nomad', back: 'briar', lead: 'YOUR RIVALS.', end: 'ANYWHERE.' },
   };
   function setupModePreviews() {
@@ -263,15 +265,19 @@ const UI = (() => {
   }
 
   function renderSelect() {
+    const solo=modeTarget==='tutorial';
+    if(solo)selSlot=0;
+    for(const id of ['add-slot','rem-slot','slot-tabs','cpu-toggle','cpu-level-wrap','sel-rules','sel-stage']) $('#'+id).style.display=solo?'none':'';
+    $('#sel-fight').textContent=solo?'START TUTORIAL ▶':'FIGHT ▶';
     const tabs = [];
-    for (let i = 0; i < activeSlots; i++) tabs.push(`<button data-slot="${i}" class="${i === selSlot ? 'on' : ''}" style="--c:${PLAYER_COLORS[i]}" aria-pressed="${i === selSlot}">P${i + 1}${isCPU[i] ? ' · CPU' : ''}</button>`);
+    for (let i = 0; i < activeSlots; i++) tabs.push(`<button data-slot="${i}" class="${i === selSlot ? 'on' : ''}" style="--c:${PLAYER_COLORS[i]}" aria-pressed="${i === selSlot}">P${i + 1}${!solo && isCPU[i] ? ' · CPU' : ''}</button>`);
     $('#slot-tabs').innerHTML = tabs.join('');
     $('#slot-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { selSlot = +b.dataset.slot; AUDIO.sfx('menu'); renderSelect(); const tab = $('#slot-tabs').querySelector(`[data-slot="${selSlot}"]`); if (tab) tab.focus({ preventScroll: true }); }));
 
     $$('#fighter-grid .fcell').forEach(c => { const selected = c.dataset.key === fighters[selSlot]; c.classList.toggle('sel', selected); c.setAttribute('aria-pressed', selected); });
     const d = FIGHTERS[fighters[selSlot]];
     renderFighterProfile(fighters[selSlot]);
-    $('#hero-player').textContent = `P${selSlot + 1} / ${isCPU[selSlot] ? 'CPU' : 'PLAYER'} SELECT`;
+    $('#hero-player').textContent = `P${selSlot + 1} / ${!solo && isCPU[selSlot] ? 'CPU' : 'PLAYER'} SELECT`;
     $('#hero-player').style.setProperty('--player', PLAYER_COLORS[selSlot]);
     $('#hero-name').textContent = d.name;
     $('#hero-title').textContent = d.title;
@@ -295,9 +301,9 @@ const UI = (() => {
     $('#cpu-level').value = rules.aiLevel;
     $('#cpu-level-val').textContent = rules.aiLevel;
     $('#cpu-level-wrap').style.opacity = isCPU.some((v, i) => v && i < activeSlots) ? 1 : 0.35;
-    $('#sel-summary').innerHTML = Array.from({ length: activeSlots }, (_, i) =>
-      `<button type="button" class="sum ${i === selSlot ? 'active' : ''}" data-slot="${i}" aria-pressed="${i === selSlot}" aria-label="Edit player ${i + 1}, ${FIGHTERS[fighters[i]].name}${isCPU[i] ? ', CPU' : ''}" style="--c:${PLAYER_COLORS[i]}"><img src="assets/portraits/${fighters[i]}_base.png?v=${BUILD}" alt=""><span>P${i + 1}${isCPU[i] ? ' · CPU' : ''}</span><b>${FIGHTERS[fighters[i]].name}</b></button>`).join('');
-    $('#rule-summary').textContent = `${rules.mode.toUpperCase()} · ${rules.stocks} STOCK${rules.stocks > 1 ? 'S' : ''}${rules.mode !== 'stock' ? ' · ' + Math.floor(rules.time / 60) + ' MIN' : ''} · ${STAGES[rules.stage].name} · ITEMS ${rules.items.toUpperCase()}`;
+    $('#sel-summary').innerHTML = Array.from({ length: solo ? 1 : activeSlots }, (_, i) =>
+      `<button type="button" class="sum ${i === selSlot ? 'active' : ''}" data-slot="${i}" aria-pressed="${i === selSlot}" aria-label="Edit player ${i + 1}, ${FIGHTERS[fighters[i]].name}${!solo && isCPU[i] ? ', CPU' : ''}" style="--c:${PLAYER_COLORS[i]}"><img src="assets/portraits/${fighters[i]}_base.png?v=${BUILD}" alt=""><span>P${i + 1}${!solo && isCPU[i] ? ' · CPU' : ''}</span><b>${FIGHTERS[fighters[i]].name}</b></button>`).join('');
+    $('#rule-summary').textContent = solo ? 'TUTORIAL · CHOOSE YOUR FIGHTER' : `${rules.mode.toUpperCase()} · ${rules.stocks} STOCK${rules.stocks > 1 ? 'S' : ''}${rules.mode !== 'stock' ? ' · ' + Math.floor(rules.time / 60) + ' MIN' : ''} · ${STAGES[rules.stage].name} · ITEMS ${rules.items.toUpperCase()}`;
   }
 
   /* ---------------- stages ---------------- */
@@ -429,7 +435,7 @@ const UI = (() => {
   function startFromSelect() {
     if (modeTarget === 'classic') { AUDIO.sfx('confirm'); Modes.startClassic(fighters[0], pals[0], rules.aiLevel); return; }
     if (modeTarget === 'targets') { AUDIO.sfx('confirm'); Modes.startTargets(fighters[0], pals[0]); return; }
-    if (modeTarget === 'homered') { AUDIO.sfx('confirm'); Modes.startHomeRun(fighters[0], pals[0]); return; }
+    if (modeTarget === 'tutorial') { AUDIO.sfx('confirm'); Modes.startTutorial(fighters[0], pals[0]); return; }
     if (modeTarget === 'multiman') { AUDIO.sfx('confirm'); Modes.startMultiMan(fighters[0], pals[0], rules.aiLevel); return; }
     const stageKey = rules.stageRandom ? pick(STAGE_KEYS) : rules.stage;
     const cast = [];
@@ -593,9 +599,50 @@ const UI = (() => {
   }
 
   /* ---------------- settings ---------------- */
+  function renderBindings(message, focusAction, focusPlayer) {
+    const players=$('#binding-players'), list=$('#binding-list');
+    players.replaceChildren(); list.replaceChildren();
+    for(const player of Object.keys(INPUT.map)) {
+      const b=document.createElement('button'); b.type='button'; b.textContent=player.toUpperCase();
+      b.classList.toggle('on',player===bindingPlayer); b.setAttribute('aria-pressed',String(player===bindingPlayer));
+      b.onclick=()=>{INPUT.capture=null;bindingAction=null;bindingPlayer=player;renderBindings(null,null,player);};players.append(b);
+      if(player===focusPlayer) b.focus({preventScroll:true});
+    }
+    for(const [action,label] of Object.entries(BINDING_LABELS)) {
+      const button=document.createElement('button'), text=document.createElement('span'), key=document.createElement('b');
+      button.type='button';text.textContent=label;key.textContent=bindingAction===action?'PRESS A KEY…':INPUT.label(INPUT.map[bindingPlayer][action]);
+      button.classList.toggle('listening',bindingAction===action);button.setAttribute('aria-label',label+': '+key.textContent);
+      button.append(text,key);list.append(button);
+      if(action===(focusAction || bindingAction)) button.focus({preventScroll:true});
+      button.onclick=()=>{
+        bindingAction=action; INPUT.clear(); renderBindings('Press a key for '+label+'. Escape cancels.');
+        INPUT.capture=code=>{
+          if(code==='Escape'){INPUT.capture=null;bindingAction=null;INPUT.clear();renderBindings('Binding canceled.',action);return;}
+          if(!INPUT.validCode(code)){renderBindings('That key is reserved or unsupported. Choose another key, or press Escape to cancel.');return;}
+          const other=Object.entries(INPUT.map[bindingPlayer]).find(([name,v])=>name!==action && v===code);
+          INPUT.bind(bindingPlayer,action,code);INPUT.capture=null;bindingAction=null;
+          const shared=Object.entries(INPUT.map).filter(([p,m])=>p!==bindingPlayer && Object.values(m).includes(code)).map(([p])=>p.toUpperCase());
+          renderBindings(label+' set to '+INPUT.label(code)+(other?' (swapped with '+BINDING_LABELS[other[0]]+')':'')+(shared.length?'. Also used by '+shared.join(', ')+'.':'.'),action);
+        };
+      };
+    }
+    $('#binding-status').textContent=message || 'Select an action to change its key.';
+  }
+  function renderHelpBindings() {
+    for(const player of ['p1','p2']){
+      const map=INPUT.map[player], wrap=$('#help-'+player); wrap.replaceChildren();
+      for(const [label,actions] of [['Move',['left','right']],['Jump / double jump',['jump']],['Aim up',['up']],['Crouch / fast-fall',['down']],['Attack',['attack']],['Special',['special']],['Up special / recovery',['up','special','jump']],['Shield / air dodge',['shield']],['Grab / use item',['grab']]]) {
+        const row=document.createElement('div'), name=document.createElement('span'), keys=document.createElement('span');row.className='krow';name.textContent=label;
+        actions.forEach((action,i)=>{if(label==='Up special / recovery' && i>0) keys.append(document.createTextNode(i===1?' + ':' or jump + special: '));const k=document.createElement('kbd');k.textContent=INPUT.label(map[action]);keys.append(k);});
+        if(label==='Up special / recovery'){keys.append(document.createTextNode(' + '));const k=document.createElement('kbd');k.textContent=INPUT.label(map.special);keys.append(k);}
+        row.append(name,keys);wrap.append(row);
+      }
+    }
+  }
   function openSettings(from) {
     settingsReturn = from;
     renderSettings();
+    renderBindings();
     show('screen-settings');
   }
   function renderSettings() {
@@ -608,6 +655,7 @@ const UI = (() => {
     });
   }
   function closeSettings() {
+    INPUT.capture=null; bindingAction=null; INPUT.clear();
     if (settingsReturn === 'screen-match') show('screen-match');
     else openTitle();
   }
@@ -646,11 +694,18 @@ const UI = (() => {
       AUDIO.sfx('confirm');
       modeTarget = b.dataset.mode;
       if (modeTarget === 'online') { Online.open(); return; }
+      if (modeTarget === 'tutorial') selSlot=0;
       show('screen-select'); renderSelect();
     }));
     $('#btn-records').onclick = () => { AUDIO.sfx('menu'); buildRecords(); };
     $('#btn-settings').onclick = () => { AUDIO.sfx('menu'); openSettings('screen-title'); };
     $('#settings-back').onclick = closeSettings;
+    $('#bindings-reset').onclick = () => { INPUT.capture=null;bindingAction=null;INPUT.resetBindings(bindingPlayer);renderBindings('Defaults restored for '+bindingPlayer.toUpperCase()+'.'); };
+    $('#tutorial-demo').onclick = () => { const m=Game.getMatch(); if(m && m.tutorial) { m.tutorial.startDemo(); Tutorial.render(m); } };
+    $('#tutorial-ledge').onclick = () => { const m=Game.getMatch(); if(m && m.tutorial) { m.tutorial.openLedge(); Tutorial.render(m); } };
+    $('#tutorial-back').onclick = () => { const m=Game.getMatch(); if(m && m.tutorial) { m.tutorial.backToLessons(); Tutorial.render(m); } };
+    $('#tutorial-toggle-touch').onclick = () => Game.toggleTutorialTouch();
+    $('#tutorial-restart').onclick = () => { const m=Game.getMatch(); if(m && m.tutorial) { m.tutorial.restoreFighters(); m.tutorial=Tutorial.create(m); Tutorial.render(m); } };
     window.addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat && current === 'screen-settings' && !e.target.isContentEditable && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) setTimeout(renderSettings, 0); });
     $$('#screen-settings [data-setting]').forEach(b => b.addEventListener('click', () => {
       const key = b.dataset.setting;
@@ -668,7 +723,7 @@ const UI = (() => {
       AUDIO.sfx('menu'); renderSettings();
     }));
     $('#records-back').onclick = () => { AUDIO.sfx('back'); openTitle(); };
-    $('#btn-help').onclick = () => { AUDIO.sfx('menu'); show('screen-help'); };
+    $('#btn-help').onclick = () => { AUDIO.sfx('menu'); renderHelpBindings(); show('screen-help'); };
     $('#help-back').onclick = () => { AUDIO.sfx('back'); openTitle(); };
     $('#btn-results-room').onclick = () => { AUDIO.sfx('confirm'); Online.returnToRoom(); };
     $('#btn-results-again').onclick = () => { AUDIO.sfx('confirm'); Game.restart(); };
@@ -691,10 +746,8 @@ const UI = (() => {
     });
     $('[data-toucha]') && $$('.touchbtn').forEach(b => {
       const key = b.dataset.touch;
-      const map = INPUT.map.p1;
-      const code = { left: map.left, right: map.right, up: map.up, down: map.down, attack: map.attack, special: map.special, jump: map.jump, shield: map.shield, grab: map.grab }[key];
-      const down = e => { e.preventDefault(); INPUT.keys[code] = true; INPUT.pressed[code] = true; b.classList.add('down'); };
-      const up = e => { e.preventDefault(); INPUT.keys[code] = false; b.classList.remove('down'); };
+      const down = e => { e.preventDefault(); INPUT.touch[key] = true; INPUT.touchPressed[key] = true; b.classList.add('down'); };
+      const up = e => { e.preventDefault(); INPUT.touch[key] = false; b.classList.remove('down'); };
       b.addEventListener('pointerdown', down);
       b.addEventListener('pointerup', up);
       b.addEventListener('pointercancel', up);
@@ -718,7 +771,7 @@ const Game = (() => {
   let canvas, ctx, match = null, raf = null, last = 0, acc = 0;
   const STEP = 1000 / 60;
   let frameDt = STEP;                 // smoothed rAF period: the panel-rate estimate
-  let cameraIntro = 0, onlineMenuOpen = false;
+  let cameraIntro = 0, onlineMenuOpen = false, tutorialTouchVisible = true;
 
   function init(cv) {
     canvas = cv; ctx = canvas.getContext('2d');
@@ -733,9 +786,31 @@ const Game = (() => {
     if (match) { match.W = innerWidth; match.H = innerHeight; match.cam.W = innerWidth; match.cam.H = innerHeight; }
   }
 
+  function syncTutorialTouch() {
+    const controls=document.getElementById('touch-controls');
+    const button=document.getElementById('tutorial-toggle-touch');
+    const active=!!(match && match.tutorial);
+    if(controls) {
+      controls.classList.toggle('tutorial-on',active && tutorialTouchVisible);
+      controls.classList.toggle('tutorial-off',active && !tutorialTouchVisible);
+      controls.classList.toggle('tutorial-paused',active && match.paused);
+    }
+    if(button) { button.textContent=tutorialTouchVisible?'HIDE TOUCH':'SHOW TOUCH';button.setAttribute('aria-pressed',String(tutorialTouchVisible)); }
+    if(!active || !tutorialTouchVisible || match.paused) {
+      INPUT.touch={};INPUT.touchPressed={};
+      document.querySelectorAll('#touch-controls .touchbtn.down').forEach(b=>b.classList.remove('down'));
+    }
+  }
+  function toggleTutorialTouch() {
+    if(!match || !match.tutorial)return;
+    tutorialTouchVisible=!tutorialTouchVisible;syncTutorialTouch();
+  }
   function startMatch(opts) {
     onlineMenuOpen = false; UI.showPause(false);
     match = new Match({ rules: opts.rules, cast: opts.cast, stageKey: opts.stageKey, W: innerWidth, H: innerHeight });
+    tutorialTouchVisible=true;
+    if(opts.metaMode==='tutorial') { match.tutorial=Tutorial.create(match); match.state='play'; }
+    Tutorial.render(match);syncTutorialTouch();
     match.cam.x = 0; match.cam.y = -160; match.cam.zoom = 1.3;
     cameraIntro = 60;
     UI.show('screen-match');
@@ -751,6 +826,7 @@ const Game = (() => {
   function restart() {
     if (Online.playing) { Online.leave(); quitToMenu(); return; }
     if (!match) return;
+    if(match.tutorial) { const original=match.tutorial.originals[0]; Modes.startTutorial(original.key,original.palIdx); return; }
     const rules = JSON.parse(JSON.stringify(match.rules));
     const cast = match.fighters.map(f => ({ key: f.key, palIdx: f.palIdx, isCPU: f.isCPU, team: f.team }));
     startMatch({ rules, cast, stageKey: match.stageDef.key });
@@ -758,11 +834,12 @@ const Game = (() => {
   function stopMatchView() {
     onlineMenuOpen = false; UI.showPause(false);
     if (raf) cancelAnimationFrame(raf); raf = null;
-    match = null;
+    match = null; Tutorial.render(null); syncTutorialTouch();
     $('#hud').style.display = 'none';
   }
   function quitToMenu() {
     Online.leave();
+    Modes.reset();
     stopMatchView();
     UI.openTitle();
   }
@@ -771,6 +848,7 @@ const Game = (() => {
     if (Online.playing) { onlineMenuOpen = force === undefined ? !onlineMenuOpen : force; UI.showPause(onlineMenuOpen); return; }
     match.paused = force === undefined ? !match.paused : force;
     UI.showPause(match.paused);
+    syncTutorialTouch();
     if (match.paused) { AUDIO.stopMusic(); } else if (SAVE.data.settings.music) AUDIO.startMusic();
   }
 
@@ -785,17 +863,18 @@ const Game = (() => {
       const d = document.createElement('div');
       d.className = 'hud-slot';
       d.id = 'hud-' + i;
+      d.dataset.fighter=f.key;
       d.style.setProperty('--c', color);
       d.innerHTML = `<div class="hud-portrait-wrap"><img class="hud-portrait" src="assets/portraits/${f.key}_base.png?v=${BUILD}" alt=""><span class="hud-player">${player}</span><span class="hud-ready" aria-label="Final Smash ready" title="Final Smash ready" hidden>★</span></div><div class="hud-info">
-          <div class="hud-tag">${f.def.name}${f.isCPU ? ' · CPU' : ''}</div>
+          <div class="hud-tag">${f.def.name}${match.tutorial && i===1 ? ' · DUMMY' : f.isCPU ? ' · CPU' : ''}</div>
           <div class="hud-dmg"><span class="pct">0</span><span class="pctsign">%</span></div>
           <div class="hud-meter" aria-hidden="true"><div class="damage-fill"></div></div>
           <div class="hud-stocks" aria-label="${f.stocks} stocks">${renderStocks(f, color)}</div>
         </div>`;
       hud.appendChild(d);
     });
-    $('#hud-timer small').textContent = match.rules.mode === 'stock' ? 'MODE' : 'TIME';
-    $('#hud-timer span').textContent = match.rules.mode === 'stock' ? 'STOCK' : formatMatchTime(match.matchTime);
+    $('#hud-timer small').textContent = match.tutorial ? 'TRAINING' : match.rules.mode === 'stock' ? 'MODE' : 'TIME';
+    $('#hud-timer span').textContent = match.tutorial ? 'PRACTICE' : match.rules.mode === 'stock' ? 'STOCK' : formatMatchTime(match.matchTime);
   }
   function renderStocks(f, color) {
     return Array.from({ length: Math.max(0, f.stocks) }, () => `<i class="stockdot" style="background:${color}"></i>`).join('');
@@ -808,6 +887,7 @@ const Game = (() => {
   let hudT = 0;
   function updateHUD() {
     if (!match || hudT++ % 3 !== 0) return;
+    if(match.tutorial && match.fighters.some((f,i)=>document.getElementById('hud-'+i)?.dataset.fighter!==f.key)) buildHUD();
     match.fighters.forEach((f, i) => {
       const el = document.getElementById('hud-' + i);
       if (!el) return;
@@ -863,6 +943,7 @@ const Game = (() => {
       match.cam.update(match.fighters, Math.max(0, dt) / STEP);
     }
     if (match) render(alpha);
+    if(match && match.tutorial) Tutorial.render(match);
     updateHUD();
   }
 
@@ -894,6 +975,7 @@ const Game = (() => {
     Backdrop.drawPlatforms(ctx, match.stage, match.time);
     Backdrop.drawStageFeatures(ctx, match.stage, match.frame, match.rules.hazards);
     Backdrop.drawStageMechanics(ctx, match.stage, match.frame, match.rules.hazards);
+    if(match.tutorial) Tutorial.draw(ctx,match);
 
     // Acid is part of the world so its visible surface matches collision height.
     if (match.rules.hazards && match.stage.hazard && match.stage.hazard.type === 'acid') {
@@ -1125,7 +1207,7 @@ const Game = (() => {
     ctx.globalAlpha = 0.85;
     ctx.font = '700 12px ui-sans-serif, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    const label = f.isCPU ? 'CPU' : 'P' + (f.playerIndex + 1);
+    const label = m.tutorial && f.id===1 ? 'DUMMY' : f.isCPU ? 'CPU' : 'P' + (f.playerIndex + 1);
     const w = ctx.measureText(label).width + 14;
     ctx.fillStyle = 'rgba(8,10,16,0.7)';
     ctx.beginPath(); ctx.roundRect(f.x - w / 2, y - 11, w, 16, 5); ctx.fill();
@@ -1156,7 +1238,7 @@ const Game = (() => {
     ctx.restore();
   }
 
-  return { init, startMatch, restart, quitToMenu, stopMatchView, togglePause, getMatch: () => match };
+  return { init, startMatch, restart, quitToMenu, stopMatchView, togglePause, toggleTutorialTouch, getMatch: () => match };
 })();
 
 /* ============================================================

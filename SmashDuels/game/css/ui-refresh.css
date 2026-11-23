@@ -60,7 +60,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #fff; outline-off
 #btn-vs .tile-no { margin: 0 auto auto 0; }
 #btn-vs strong { font-size: clamp(27px,3vw,43px); }
 [data-mode=classic] { background: #3856a4 !important; } [data-mode=targets] { background: #149d9d !important; }
-[data-mode=homered] { background: #e6942d !important; } [data-mode=multiman] { background: #7d58ad !important; }
+[data-mode=tutorial] { background: #e6942d !important; } [data-mode=multiman] { background: #7d58ad !important; }
 .home-utility { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 20px; }
 .home-link { padding: 5px 0; color: #27313d; border-bottom: 2px solid #a8adb0; font-size: 10px; font-weight: 1000; letter-spacing: .08em; }
 .home-link span { color: var(--red); margin-left: 5px; }
@@ -245,4 +245,42 @@ button:focus-visible, input:focus-visible { outline: 3px solid #fff; outline-off
   #screen-select .screen-head { padding: 8px; gap: 4px; }
   #screen-select .screen-head h1 { font-size: clamp(12px, 4vw, 16px); letter-spacing: -.03em; }
   #screen-select .screen-head .pill { padding: 7px 5px; font-size: 8px; }
+}
+
+/* Keyboard controls and guided practice */
+.settings-wrap { overflow-y:auto; align-content:start; padding:0 8px 20px 0; }
+.key-settings { grid-column:1 / -1; background:#fff; border:2px solid #222d38; box-shadow:6px 6px 0 #a8b0ad; padding:22px 24px; }
+.key-settings-head { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.key-settings-head span { color:#d3532d; font-size:10px; font-weight:1000; letter-spacing:.16em; }
+.key-settings-head h2 { margin:5px 0; font-size:26px; font-style:italic; color:#18222c; }
+.key-settings-head p,.binding-note { color:#59646d; font-size:12px; line-height:1.5; }
+.key-settings button { cursor:pointer; font:inherit; font-weight:900; border:2px solid #222d38; color:#18222c; background:#f0f3f0; padding:9px 13px; }
+.key-settings button:hover,.key-settings button:focus-visible { outline:3px solid #ed9159; outline-offset:2px; }
+.binding-players { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0; }
+.binding-players button.on { background:#182b39; color:white; }
+.binding-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.binding-list button { display:flex; align-items:center; justify-content:space-between; gap:6px; text-align:left; min-width:0; font-size:12px; }
+.binding-list button b { background:#253849; color:white; padding:5px 8px; text-align:center; }
+.binding-list button.listening { border-color:#db4e3a; background:#fff0e7; }
+.binding-status { min-height:1.4em; color:#c34d2a; font-weight:800; font-size:12px; }
+.tutorial-panel { position:absolute; top:76px; left:16px; width:min(350px,calc(100vw - 32px)); background:#111d2deF; color:#fff; padding:14px 16px; border:2px solid #f3d051; box-shadow:5px 5px 0 #0008; pointer-events:auto; }
+.tutorial-panel[hidden] { display:none; }
+.tutorial-progress { display:block; font-size:10px; color:#f3d051; font-weight:900; letter-spacing:.14em; }
+.tutorial-panel strong { display:block; font-size:19px; font-style:italic; margin:4px 0; }
+.tutorial-panel p { font-size:13px; line-height:1.35; margin:4px 0 8px; }
+.tutorial-panel .tutorial-touch-hint { color:#9fe4ff; font-size:11px; font-weight:800; }
+.tutorial-panel .tutorial-character-note { color:#f3d051; font-size:11px; }
+.tutorial-character-note:empty { display:none; }
+#touch-controls.tutorial-on { display:block; }
+#touch-controls.tutorial-off, #touch-controls.tutorial-paused { display:none; }
+#tutorial-feedback { font-size:12px; color:#dce7f2; min-height:1.4em; }
+#tutorial-feedback.success { color:#8ff4b6; font-weight:900; }
+.tutorial-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.tutorial-actions button { cursor:pointer; background:#f3d051; border:0; padding:7px 9px; color:#172330; font-size:10px; font-weight:900; }
+.tutorial-actions button:disabled { opacity:.5; }
+@media(max-width:700px) { .key-settings { grid-column:1; padding:16px; } .binding-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .tutorial-panel { top:54px; left:8px; width:min(300px,calc(100vw - 16px)); padding:8px 10px; } .tutorial-panel strong { font-size:15px; } .tutorial-panel p,#tutorial-feedback { font-size:11px; } }
+
+/* Keep the lesson panel clear of the thumb controls in short landscape views. */
+@media(max-height:520px) and (orientation:landscape) {
+  .tutorial-panel { top:48px; left:50%; transform:translateX(-50%); width:min(440px,calc(100vw - 340px)); min-width:170px; max-height:calc(100dvh - 64px); overflow-y:auto; }
 }

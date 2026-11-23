@@ -680,31 +680,17 @@ test('hazards: lava burns on a rhythm, not every frame', () => {
 });
 
 /* =================== facing =================== */
-test('facing: a back-roll keeps the fighter turned toward the opponent', () => {
-  const { ctx } = run();
-  const m = newMatch(ctx, cast(2, ['valor', 'grim']), 'terminal');
-  const f = m.fighters[0], o = m.fighters[1];
-  f.x = -80; o.x = 80; f.y = o.y = m.stage.ground.y;
-  f.onGround = true; f.state = 'idle';
-  m.readPlayerInput = (fr) => fr.__raw || {};
-  f.__raw = { right: true }; o.__raw = {};
-  for (let i = 0; i < 4; i++) m.update();
-  assert(f.facing === 1, 'expected to face right, got ' + f.facing);
-  // roll backwards (left): shield + direction on the same frame is the
-  // shorthop-guard roll, so that's the path under test
-  let sawRoll = false, flipped = false;
-  for (let i = 0; i < 40; i++) {
-    f.__raw = (i < 6) ? { shield: true, left: i >= 3 } : {};
-    o.__raw = {};
+test('shield: horizontal direction never triggers a ground roll', () => {
+  for (const mode of ['simultaneous','after']) for (const dir of ['left','right']) {
+    const {ctx}=run(), m=newMatch(ctx,cast(2,['valor','grim']),'terminal');
+    const f=m.fighters[0];f.x=-200;f.y=m.stage.ground.y;f.onGround=true;f.state='idle';
+    m.readPlayerInput=fr=>fr.__raw || {};
+    f.__raw=mode==='simultaneous'?{shield:true,[dir]:true}:{shield:true};
     m.update();
-    if (f.state === 'roll') {
-      sawRoll = true;
-      if (f.facing !== 1) flipped = true;
-    }
+    f.__raw={shield:true,[dir]:true};
+    for(let i=0;i<12;i++){m.update();assert(f.state!=='roll','shield plus direction caused a roll');assert(f.shieldHP>0,'shield should stay up');}
+    f.__raw={};m.update();assert(f.shieldHP===0,'shield must still release');
   }
-  assert(sawRoll, 'roll never started (state=' + f.state + ')');
-  assert(!flipped, 'facing flipped during a back-roll');
-  assert(f.facing === 1, 'fighter ended up facing away after rolling backwards');
 });
 
 test('facing: committed attacks keep their facing', () => {
